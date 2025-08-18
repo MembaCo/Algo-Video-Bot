@@ -11,6 +11,7 @@ backend/*/__pycache__/
 # Veritabanı ve Kalıcı Veriler
 downloads/
 database.*
+.env
 
 # Log Dosyaları
 *.log

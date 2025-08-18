@@ -43,6 +43,53 @@
             color: white;
             transition: width 0.3s ease-in-out;
         }
+
+        .btn {
+            border: none;
+            background-color: transparent;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .btn-green {
+            color: #16a34a;
+        }
+
+        .btn-green:hover {
+            color: #15803d;
+        }
+
+        .btn-yellow {
+            color: #ca8a04;
+        }
+
+        .btn-yellow:hover {
+            color: #a16207;
+        }
+
+        .btn-blue {
+            color: #2563eb;
+        }
+
+        .btn-blue:hover {
+            color: #1d4ed8;
+        }
+
+        .btn-purple {
+            color: #7c3aed;
+        }
+
+        .btn-purple:hover {
+            color: #6d28d9;
+        }
+
+        .btn-red {
+            color: #dc2626;
+        }
+
+        .btn-red:hover {
+            color: #b91c1c;
+        }
     </style>
 </head>
 
@@ -72,23 +119,37 @@
         </div>
         {% endif %}
         {% endwith %}
-        <div class="bg-white shadow-lg rounded-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">Yeni Video Ekle</h2>
-            <form action="{{ url_for('add_video') }}" method="post" class="flex flex-col sm:flex-row gap-4">
-                <input type="url" name="url" placeholder="https://www.hdfilmcehennemi.ltd/..."
-                    class="flex-grow shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    required>
-                <button type="submit"
-                    class="inline-flex justify-center items-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Sıraya
-                    Ekle</button>
-            </form>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-white shadow-lg rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Yeni Video Ekle</h2>
+                <form action="{{ url_for('add_video') }}" method="post" class="flex flex-col sm:flex-row gap-4">
+                    <input type="url" name="url" placeholder="Tek film linki (https://...)"
+                        class="flex-grow shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        required>
+                    <button type="submit"
+                        class="inline-flex justify-center items-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">Sıraya
+                        Ekle</button>
+                </form>
+            </div>
+            <div class="bg-white shadow-lg rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Toplu Video Ekle (Liste)</h2>
+                <form action="{{ url_for('add_list') }}" method="post" class="flex flex-col sm:flex-row gap-4">
+                    <input type="url" name="list_url" placeholder="Kategori/Arşiv linki (https://...)"
+                        class="flex-grow shadow-sm focus:ring-teal-500 focus:border-teal-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                        required>
+                    <button type="submit"
+                        class="inline-flex justify-center items-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700">Toplu
+                        Ekle</button>
+                </form>
+            </div>
         </div>
+
         <div class="bg-white shadow-lg rounded-lg">
             <div class="px-4 py-5 sm:px-6 border-b border-gray-200 flex justify-between items-center">
                 <h3 class="text-lg leading-6 font-medium text-gray-900">İndirme Kuyruğu</h3>
                 <form action="{{ url_for('toggle_auto_download') }}" method="post">
                     <button type="submit" id="auto-download-btn" class="px-4 py-2 text-sm font-medium rounded-md">
-                        <!-- JS ile güncellenecek -->
                     </button>
                 </form>
             </div>
@@ -135,8 +196,8 @@
                                 <div class="font-bold text-base text-indigo-800">{{ video.title or 'Başlık Bilinmiyor'
                                     }}</div>
                                 <div class="mt-1">
-                                    <span class="font-semibold">IMDb:</span>
-                                    <span class="text-yellow-600 font-bold">{{ video.imdb_score }}</span> |
+                                    <span class="font-semibold">IMDb:</span> <span class="text-yellow-600 font-bold">{{
+                                        video.imdb_score }}</span> |
                                     <span class="font-semibold">Yıl:</span> {{ video.year }} |
                                     <span class="font-semibold">Tür:</span> {{ video.genre }}
                                 </div>
@@ -151,8 +212,30 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium align-top">
-                                <div id="actions-{{ video.id }}">
-                                    <!-- Butonlar JavaScript ile buraya eklenecek -->
+                                <div id="actions-{{ video.id }}" class="flex items-center space-x-4">
+                                    {% if video.status in ['Kaynak aranıyor...', 'İndiriliyor'] %}
+                                    <form action="{{ url_for('stop_download', video_id=video.id) }}" method="post">
+                                        <button type="submit" class="btn btn-yellow font-semibold">Durdur</button>
+                                    </form>
+                                    {% elif video.status == 'Tamamlandı' %}
+                                    <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
+                                        <button type="submit" class="btn btn-blue font-semibold">Yeniden İndir</button>
+                                    </form>
+                                    {% if video.filepath %}
+                                    <form action="{{ url_for('delete_file', video_id=video.id) }}" method="post"
+                                        onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');">
+                                        <button type="submit" class="btn btn-purple font-semibold">Disk'ten Sil</button>
+                                    </form>
+                                    {% endif %}
+                                    {% else %}
+                                    <form action="{{ url_for('start_download', video_id=video.id) }}" method="post">
+                                        <button type="submit" class="btn btn-green font-semibold">Başlat</button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="{{ url_for('delete_video', video_id=video.id) }}" method="post"
+                                        onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');">
+                                        <button type="submit" class="btn btn-red font-semibold">Sil</button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>
@@ -165,9 +248,7 @@
                 </table>
             </div>
         </div>
-        <footer class="text-center text-sm text-gray-500 py-4 mt-4">
-            Sürüm {{ version }}
-        </footer>
+        <footer class="text-center text-sm text-gray-500 py-4 mt-4">Sürüm {{ version }}</footer>
     </main>
     <script>
         function updateUI() {
@@ -192,23 +273,38 @@
                         autoDownloadBtn.className = 'px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700';
                     }
 
-                    document.querySelectorAll('tbody tr[id^="video-row-"]').forEach(row => {
-                        const videoId = row.id.split('-')[2];
-                        if (!videos[videoId]) {
-                            row.remove();
+                    // --- YENİ YENİLEME MANTIĞI ---
+                    const displayedVideoRows = document.querySelectorAll('tbody tr[id^="video-row-"]');
+                    const receivedVideoCount = Object.keys(videos).length;
+
+                    // Eğer sunucudaki video sayısı ile ekrandaki farklıysa, sayfayı yenile.
+                    // Bu, özellikle toplu ekleme sonrası yeni videoların görünmesini sağlar.
+                    if (displayedVideoRows.length !== receivedVideoCount && receivedVideoCount > 0) {
+                        // Yenileme döngüsünü engellemek için bir bayrak kullanıyoruz.
+                        if (!sessionStorage.getItem('isReloading')) {
+                            sessionStorage.setItem('isReloading', 'true');
+                            window.location.reload();
+                            return; // Yenileme sonrası scriptin devam etmesini engelle
                         }
-                    });
+                    }
+
+                    // Yenileme işlemi bittiğinde (sayılar eşitlendiğinde) bayrağı temizle.
+                    if (displayedVideoRows.length === receivedVideoCount) {
+                        sessionStorage.removeItem('isReloading');
+                    }
+                    // --- YENİLEME MANTIĞI SONU ---
 
                     for (const id in videos) {
                         const video = videos[id];
+                        const row = document.getElementById(`video-row-${id}`);
+                        if (!row) continue;
+
                         const statusText = document.getElementById(`status-text-${id}`);
                         const progressContainer = document.getElementById(`progress-container-${id}`);
                         const progressBar = document.getElementById(`progress-bar-${id}`);
                         const progressText = document.getElementById(`progress-text-${id}`);
-                        const actionsContainer = document.getElementById(`actions-${id}`);
                         const posterImg = document.getElementById(`poster-${id}`);
 
-                        if (!statusText || !actionsContainer) continue;
                         if (posterImg && video.poster_url) posterImg.src = video.poster_url;
 
                         const simpleStatus = video.status.split(':')[0].toLowerCase().replace(/[^a-z0-9]/gi, '');
@@ -225,30 +321,6 @@
                         } else {
                             progressContainer.style.display = 'none';
                         }
-
-                        let actionsHtml = '';
-                        if (isWorking) {
-                            actionsHtml = `<a href="/stop/${id}" class="text-yellow-600 hover:text-yellow-900">Durdur</a>`;
-                        } else if (isDone) {
-                            actionsHtml = `<a href="/start/${id}" class="text-blue-600 hover:text-blue-900">Yeniden İndir</a>`;
-                            if (video.filepath) {
-                                actionsHtml += `
-                                    <form action="/delete_file/${id}" method="post" class="inline-block ml-4" onsubmit="return confirm('Bu dosyayı diskten kalıcı olarak silmek istediğinizden emin misiniz?');">
-                                        <button type="submit" class="text-purple-600 hover:text-purple-900">Disk'ten Sil</button>
-                                    </form>
-                                `;
-                            }
-                        } else {
-                            actionsHtml = `<a href="/start/${id}" class="text-green-600 hover:text-green-900">Başlat</a>`;
-                        }
-
-                        actionsHtml += `
-                            <form action="/delete/${id}" method="post" class="inline-block ml-4" onsubmit="return confirm('Bu kaydı silmek istediğinizden emin misiniz?');">
-                                <button type="submit" class="text-red-600 hover:text-red-900">Sil</button>
-                            </form>
-                        `;
-
-                        actionsContainer.innerHTML = actionsHtml;
                     }
                 })
                 .catch(error => console.error('Error fetching status:', error));

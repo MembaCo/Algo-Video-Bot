@@ -13,32 +13,52 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
+
+# webdriver_manager artık Docker ortamında kullanılmayacağı için kaldırıldı.
+# from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
 
 # Yerel modüllerden importlar
 import config
-from database import get_db
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
 
 def update_status(video_id, status=None, source_url=None, progress=None, filepath=None):
-    """Veritabanındaki bir videonun durumunu, ilerlemesini veya dosya yolunu günceller."""
-    db = get_db()
-    if status:
-        db.execute("UPDATE videos SET status = ? WHERE id = ?", (status, video_id))
-    if source_url:
-        db.execute(
-            "UPDATE videos SET source_url = ? WHERE id = ?", (source_url, video_id)
+    """
+    Veritabanındaki bir videonun durumunu, ilerlemesini veya dosya yolunu günceller.
+    Bu fonksiyon, ana Flask uygulamasından bağımsız olarak kendi veritabanı bağlantısını kurar.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(config.DATABASE)
+        cursor = conn.cursor()
+        if status:
+            cursor.execute(
+                "UPDATE videos SET status = ? WHERE id = ?", (status, video_id)
+            )
+        if source_url:
+            cursor.execute(
+                "UPDATE videos SET source_url = ? WHERE id = ?", (source_url, video_id)
+            )
+        if progress is not None:
+            cursor.execute(
+                "UPDATE videos SET progress = ? WHERE id = ?", (progress, video_id)
+            )
+        if filepath is not None:
+            cursor.execute(
+                "UPDATE videos SET filepath = ? WHERE id = ?", (filepath, video_id)
+            )
+        conn.commit()
+    except sqlite3.Error as e:
+        logger.error(
+            f"ID {video_id} için veritabanı güncellenirken hata oluştu: {e}",
+            exc_info=True,
         )
-    if progress is not None:
-        db.execute("UPDATE videos SET progress = ? WHERE id = ?", (progress, video_id))
-    if filepath is not None:
-        db.execute("UPDATE videos SET filepath = ? WHERE id = ?", (filepath, video_id))
-    db.commit()
-    db.close()
+    finally:
+        if conn:
+            conn.close()
 
 
 def find_manifest_url(target_url):
@@ -53,8 +73,13 @@ def find_manifest_url(target_url):
 
     driver = None
     try:
-        service = Service(ChromeDriverManager().install())
+        # --- GÜNCELLEME ---
+        # ChromeDriverManager'i kullanmak yerine, Dockerfile'da kurduğumuz
+        # ChromeDriver'ın sabit yolunu doğrudan belirtiyoruz.
+        service = Service(executable_path="/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
+        # --- GÜNCELLEME SONU ---
+
         wait = WebDriverWait(driver, 30)
         driver.get(target_url)
         play_button_main = wait.until(EC.element_to_be_clickable((By.ID, "fimcnt")))
@@ -134,9 +159,24 @@ def process_video(video_id):
     """Tek bir video için tüm bulma ve indirme sürecini yönetir."""
     global logger
     logger = setup_logging()
-    db = get_db()
-    video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
-    db.close()
+
+    video = None
+    conn = None
+    try:
+        conn = sqlite3.connect(config.DATABASE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        video = cursor.execute(
+            "SELECT * FROM videos WHERE id = ?", (video_id,)
+        ).fetchone()
+    except sqlite3.Error as e:
+        logger.error(
+            f"ID {video_id} için veritabanından veri okunurken hata: {e}", exc_info=True
+        )
+    finally:
+        if conn:
+            conn.close()
+
     if not video:
         logger.error(f"Veritabanında video ID {video_id} bulunamadı.")
         return

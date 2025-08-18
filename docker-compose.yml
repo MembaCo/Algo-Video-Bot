@@ -1,0 +1,17 @@
+# @author: MembaCo.
+
+# 'version' etiketi modern docker-compose'da gerekli değildir ve kaldırılmıştır.
+services:
+  video-bot:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./database.db:/app/database.db
+      - ./app.log:/app.log
+    env_file:
+      - .env
+    shm_size: '2g'
+    container_name: algo-video-bot
