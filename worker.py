@@ -42,7 +42,7 @@ def update_status(video_id, status=None, source_url=None, progress=None, filepat
 
 
 def find_manifest_url(target_url):
-    """Selenium ile manifest URL'sini ve gerekli headerları bulur."""
+    """Selenium ile manifest URL'sini, gerekli headerları ve çerezleri bulur."""
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -71,24 +71,29 @@ def find_manifest_url(target_url):
         )
         logger.info(f"Manifest URL'si bulundu: {request.url}")
         headers = dict(request.headers)
-        return request.url, iframe_src, headers
+        cookies = driver.get_cookies()
+        return request.url, iframe_src, headers, cookies
     except TimeoutException:
         logger.warning(
             f"Manifest URL'si beklenirken zaman aşımına uğradı. URL: {target_url}"
         )
-        return None, None, None
+        return None, None, None, None
     finally:
         if driver:
             driver.quit()
 
 
-def download_with_yt_dlp(video_id, manifest_url, headers, filename_template):
+def download_with_yt_dlp(
+    video_id, manifest_url, headers, cookie_filepath, filename_template
+):
     """yt-dlp ile videoyu indirir ve ilerlemeyi veritabanına yazar."""
     output_template = os.path.join(
         config.DOWNLOADS_FOLDER, f"{filename_template}.%(ext)s"
     )
     command = [
         "yt-dlp",
+        "--cookies",
+        cookie_filepath,
         "--no-check-certificates",
         "--no-color",
         "--progress",
@@ -136,30 +141,68 @@ def process_video(video_id):
         logger.error(f"Veritabanında video ID {video_id} bulunamadı.")
         return
 
+    cookie_filepath = f"cookies_{video_id}.txt"
     try:
         logger.info(f"ID {video_id}: Kaynak adresi aranıyor... URL: {video['url']}")
-        manifest_url, iframe_src, headers = find_manifest_url(video["url"])
+        manifest_url, iframe_src, headers, cookies = find_manifest_url(video["url"])
         if manifest_url:
+            with open(cookie_filepath, "w", encoding="utf-8") as f:
+                f.write("# Netscape HTTP Cookie File\n")
+                for cookie in cookies:
+                    if "name" not in cookie or "value" not in cookie:
+                        continue
+                    domain = cookie.get("domain", "")
+                    include_subdomains = "TRUE" if domain.startswith(".") else "FALSE"
+                    path = cookie.get("path", "/")
+                    secure = "TRUE" if cookie.get("secure") else "FALSE"
+                    expiry = cookie.get("expiry")
+                    expiry = int(expiry) if expiry is not None else 0
+                    name = cookie["name"]
+                    value = cookie["value"]
+                    f.write(
+                        f"{domain}\t{include_subdomains}\t{path}\t{secure}\t{expiry}\t{name}\t{value}\n"
+                    )
+
             update_status(video_id, status="İndiriliyor", source_url=manifest_url)
             title = video["title"] or "Bilinmeyen Film"
             year = video["year"] or ""
             genre = video["genre"] or ""
 
-            # GÜVENLİ DOSYA ADI OLUŞTURMA
-            # Sadece harf, rakam, boşluk ve tire karakterlerine izin ver
-            clean_title = re.sub(r"[^\w\s-]", "", title).strip()
-            clean_genre = re.sub(r"[^\w\s-]", "", genre).strip()
+            def to_ascii_safe(text):
+                text = (
+                    text.replace("ı", "i")
+                    .replace("İ", "I")
+                    .replace("ğ", "g")
+                    .replace("Ğ", "G")
+                )
+                text = (
+                    text.replace("ü", "u")
+                    .replace("Ü", "U")
+                    .replace("ş", "s")
+                    .replace("Ş", "S")
+                )
+                text = (
+                    text.replace("ö", "o")
+                    .replace("Ö", "O")
+                    .replace("ç", "c")
+                    .replace("Ç", "C")
+                )
+                text = re.sub(r"[^\x00-\x7F]+", "", text)
+                text = re.sub(r'[<>:"/\\|?*]', "", text).strip()
+                return text
+
+            clean_title = to_ascii_safe(title)
+            clean_genre = to_ascii_safe(genre)
             filename_base = f"{clean_title} - {year} - {clean_genre}".strip(" -")
 
             logger.info(
-                f"ID {video_id}: İndirme başlıyor. Güvenli dosya adı: {filename_base}"
+                f"ID {video_id}: İndirme başlıyor. Güvenli (ASCII) dosya adı: {filename_base}"
             )
 
             success, message = download_with_yt_dlp(
-                video_id, manifest_url, headers, filename_base
+                video_id, manifest_url, headers, cookie_filepath, filename_base
             )
             if success:
-                # İndirme sonrası dosyayı bul ve yolunu veritabanına kaydet
                 search_pattern = os.path.join(
                     config.DOWNLOADS_FOLDER, f"{filename_base}.*"
                 )
@@ -193,6 +236,9 @@ def process_video(video_id):
             f"ID {video_id}: process_video içinde beklenmedik bir genel hata oluştu."
         )
         update_status(video_id, status="Hata: Genel")
+    finally:
+        if os.path.exists(cookie_filepath):
+            os.remove(cookie_filepath)
 
 
 if __name__ == "__main__":

@@ -1,103 +1,101 @@
-Flask ile Gelişmiş Video İndirme Yöneticisi
-Bu proje, hdfilmcehennemi.ltd gibi modern ve dinamik video sitelerinden içerik indirmeyi otomatikleştiren, web tabanlı bir yönetim paneline sahip gelişmiş bir Python uygulamasıdır. Kullanıcıların video linklerini ekleyip indirme işlemlerini (başlatma, durdurma, silme) bir web arayüzü üzerinden yönetmelerini sağlar.
+# Flask ile Gelişmiş Video İndirme Yöneticisi v1.0.0
 
-(Not: Bu kısmı kendi ekran görüntünüzün URL'si ile güncelleyebilirsiniz.)
+Bu proje, modern ve dinamik video sitelerinden (şu anda `hdfilmcehennemi.ltd` desteklenmektedir) içerik indirmeyi otomatikleştiren, web tabanlı bir yönetim paneline sahip gelişmiş bir Python uygulamasıdır. Kullanıcıların video linklerini ekleyip indirme işlemlerini (başlatma, durdurma, silme, otomatik indirme) bir web arayüzü üzerinden yönetmelerini sağlar.
 
-🚀 Temel Özellikler
-Web Tabanlı Yönetim Paneli: Videoları eklemek ve indirme kuyruğunu yönetmek için modern ve kullanıcı dostu bir arayüz.
+![Uygulama Arayüzü](https://i.imgur.com/example.png)
+*(Not: Bu kısmı kendi ekran görüntünüzün URL'si ile güncelleyebilirsiniz.)*
 
-Güvenli Giriş Sistemi: Panele erişimi korumak için basit kullanıcı adı ve şifre doğrulama.
+---
 
-Dinamik Bilgi Çekme: Sıraya eklenen her video için film adı, yılı ve türü gibi meta verileri otomatik olarak siteden çeker.
+## 🚀 Temel Özellikler
 
-Akıllı Dosya Adlandırma: İndirilen videoları, çekilen meta verilere göre (Film Adı - Yıl - Tür.mp4 formatında) otomatik olarak isimlendirir.
+- **Modern Web Arayüzü:** Videoları eklemek, kuyruğu yönetmek ve indirme durumlarını canlı olarak izlemek için kullanıcı dostu bir panel.
+- **Güvenli Giriş Sistemi:** Panele erişimi korumak için basit kullanıcı adı ve şifre doğrulama.
+- **Akıllı Bilgi Çekme:** Sıraya eklenen her video için film adı, yılı, türü, özeti, IMDb puanı, yönetmen, oyuncular ve poster resmi gibi zengin meta verileri otomatik olarak siteden çeker.
+- **Otomatik İndirme Yöneticisi:** Kuyruğa eklenen videoları, aktif edildiğinde sırayla ve otomatik olarak indirir.
+- **Gelişmiş İndirme Kontrolü:**
+  - İndirmeleri tek bir tıkla başlatın.
+  - Devam eden indirmeleri durdurun (duraklatın).
+  - Kuyruktaki kayıtları veya tamamlanmış indirmelerin sadece kaydını silin.
+  - **Disk'ten Sil:** İndirilmiş video dosyasını doğrudan arayüzden kalıcı olarak silin.
+- **Canlı Durum Takibi:** Web arayüzü, indirme durumunu (Kaynak aranıyor..., İndiriliyor, Tamamlandı, Hata) ve indirme ilerlemesini (%) anlık olarak günceller.
+- **Arka Plan İşlemleri:** Uzun süren indirme işlemleri, web arayüzünün donmasını engellemek için arka planda ayrı prosesler (`multiprocessing`) olarak çalışır.
+- **Dayanıklı Web Kazıma (Scraping):**
+  - Site yapısı değişikliklerine karşı hibrit bir yaklaşım kullanır: Öncelikli olarak güvenilir **JSON-LD** verisini okur, başarısız olursa standart **HTML** etiketlerini analiz eder.
+  - `Selenium-wire` kullanarak JavaScript ile korunan ve dinamik olarak yüklenen video kaynaklarını bulur.
+- **Güvenilir Video İndirme:**
+  - `yt-dlp` entegrasyonu ile en karmaşık video akışlarını (`.m3u8` vb.) indirir.
+  - Sunucu taraflı korumaları (`403 Forbidden` vb.) aşmak için tarayıcıdan aldığı **çerez (cookie) ve header** bilgilerini otomatik olarak kullanır.
+- **Modüler ve Genişletilebilir Mimari:** Proje, gelecekte farklı video siteleri için yeni modüller eklemeyi kolaylaştıracak şekilde tasarlanmıştır.
 
-Gelişmiş İndirme Kontrolü:
+---
 
-İndirmeleri tek bir tıkla başlatın.
+## 🛠️ Proje Mimarisi
 
-Devam eden indirmeleri durdurun (duraklatın) ve daha sonra devam ettirin.
+- **`app.py`**: Ana Flask uygulaması. Web sunucusunu çalıştırır, kullanıcı arayüzünü sunar, veritabanı işlemlerini yönetir ve arka plan indirme proseslerini tetikler. Otomatik indirme yöneticisini barındırır.
+- **`worker.py`**: Arka plan işçisi. `app.py` tarafından her bir indirme için özel olarak çağrılır. Selenium ile video kaynağını bulur ve `yt-dlp` ile indirme işlemini gerçekleştirir.
+- **`config.py`**: Tüm yapılandırma ayarlarının (giriş bilgileri, veritabanı adı, versiyon vb.) merkezileştirildiği dosya.
+- **`database.py`**: Veritabanı bağlantısı ve kurulum mantığını içeren modül.
+- **`logging_config.py`**: Tüm uygulama için merkezi loglama yapılandırmasını yönetir. Logları hem konsola hem de `app.log` dosyasına yazar.
+- **`templates/`**: Web arayüzünü oluşturan HTML şablonlarını içerir.
+- **`database.db`**: İndirme kuyruğundaki videoların bilgilerini ve durumlarını saklayan SQLite veritabanı.
+- **`downloads/`**: İndirilen videoların kaydedildiği klasör.
 
-Kuyruktaki veya tamamlanmış indirmeleri silin.
+---
 
-Canlı Durum Takibi: Web arayüzü, indirme durumunu (Kaynak aranıyor..., İndiriliyor, Tamamlandı, Hata) ve indirme ilerlemesini (%) her birkaç saniyede bir otomatik olarak günceller.
+## ⚙️ Kurulum ve Çalıştırma
 
-Arka Plan İşlemleri: Uzun süren indirme işlemleri, web arayüzünün donmasını engellemek için arka planda ayrı prosesler olarak çalışır.
+1. **Projeyi Klonlayın:**
 
-Gelişmiş Scraping Yetenekleri:
+    ```bash
+    git clone [https://github.com/kullanici-adiniz/proje-adiniz.git](https://github.com/kullanici-adiniz/proje-adiniz.git)
+    cd proje-adiniz
+    ```
 
-Selenium-wire kullanarak JavaScript ile korunan ve dinamik olarak yüklenen video kaynaklarını bulur.
+2. **Gerekli Kütüphaneleri Yükleyin:**
+    *(Bir sanal ortam (virtual environment) oluşturmanız şiddetle tavsiye edilir.)*
 
-Gizli ağ trafiğini dinleyerek en karmaşık video akış adreslerini (.m3u8, manifest.txt vb.) tespit eder.
+    ```bash
+    # Sanal ortam oluşturma (isteğe bağlı ama önerilir)
+    python -m venv venv
+    source venv/bin/activate  # Linux/macOS için
+    # venv\Scripts\activate    # Windows için
 
-yt-dlp entegrasyonu ile Referer ve User-Agent gibi güvenlik kontrollerini aşarak indirme yapar.
+    # Gerekli kütüphaneleri yükle
+    pip install -r requirements.txt
+    ```
 
-🛠️ Proje Mimarisi
-app.py: Ana Flask uygulaması. Web sunucusunu çalıştırır, kullanıcı arayüzünü sunar, veritabanı işlemlerini yönetir ve arka plan indirme proseslerini tetikler.
+3. **Yönetici Bilgilerini Ayarlayın:**
+    `config.py` dosyasını açın ve `ADMIN_USERNAME` ile `ADMIN_PASSWORD` değişkenlerini kendi istediğiniz bilgilerle güncelleyin.
 
-worker.py: Arka plan işçisi. app.py tarafından her bir indirme için özel olarak çağrılır. Selenium ile video kaynağını bulur ve yt-dlp ile indirme işlemini gerçekleştirir.
+4. **Uygulamayı Başlatın:**
 
-templates/: Web arayüzünü oluşturan HTML şablonlarını içerir.
+    ```bash
+    python app.py
+    ```
 
-login.html: Giriş sayfası.
+    Uygulama, varsayılan olarak `http://127.0.0.1:5000` adresinde çalışmaya başlayacaktır.
 
-index.html: Ana yönetim paneli.
+---
 
-database.db: İndirme kuyruğundaki videoların bilgilerini ve durumlarını saklayan SQLite veritabanı.
+## 🖥️ Nasıl Kullanılır?
 
-downloads/: İndirilen videoların kaydedildiği klasör.
+1. Tarayıcınızı açın ve `http://127.0.0.1:5000` adresine gidin.
+2. Belirlediğiniz kullanıcı adı ve şifre ile giriş yapın.
+3. İndirmek istediğiniz `hdfilmcehennemi.ltd` linkini forma yapıştırın ve "Sıraya Ekle" butonuna tıklayın.
+4. Videolarınız kuyruğa eklenecektir. İsterseniz "Otomatik İndirmeyi Başlat" butonuna tıklayarak tüm kuyruğun sırayla indirilmesini sağlayabilir veya her video için manuel olarak "Başlat" butonunu kullanabilirsiniz.
+5. İşlemin durumunu ve ilerlemesini arayüzden canlı olarak takip edin.
 
-⚙️ Kurulum ve Çalıştırma
-Projeyi yerel makinenizde çalıştırmak için aşağıdaki adımları izleyin:
+---
 
-1. Projeyi Klonlayın:
+## 💻 Kullanılan Teknolojiler
 
-git clone https://github.com/kullanici-adiniz/proje-adiniz.git
-cd proje-adiniz
+- **Backend:** Python, Flask
+- **Web Scraping & Otomasyon:** Selenium, Selenium-Wire, BeautifulSoup
+- **Video İndirme:** yt-dlp
+- **Frontend:** HTML, Tailwind CSS, JavaScript (Fetch API)
+- **Veritabanı:** SQLite
+- **Proses Yönetimi:** Multiprocessing, Threading
+- **Loglama:** Python `logging` modülü
 
-2. Gerekli Kütüphaneleri Yükleyin:
-Bir sanal ortam oluşturmanız tavsiye edilir.
-
-# Sanal ortam oluşturma (isteğe bağlı ama önerilir)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS için
-# venv\Scripts\activate    # Windows için
-
-# Gerekli kütüphaneleri yükle
-pip install -r requirements.txt
-
-3. Yönetici Bilgilerini Ayarlayın:
-app.py dosyasını açın ve ADMIN_USERNAME ile ADMIN_PASSWORD değişkenlerini kendi istediğiniz bilgilerle güncelleyin.
-
-4. Uygulamayı Başlatın:
-Uygulamayı çalıştırmak için aşağıdaki komutu terminalde çalıştırın:
-
-python app.py
-
-Uygulama, varsayılan olarak http://127.0.0.1:5000 adresinde çalışmaya başlayacaktır.
-
-🖥️ Nasıl Kullanılır?
-Tarayıcınızı açın ve http://127.0.0.1:5000 adresine gidin.
-
-Belirlediğiniz kullanıcı adı ve şifre ile giriş yapın.
-
-İndirmek istediğiniz hdfilmcehennemi.ltd linkini forma yapıştırın ve "Sıraya Ekle" butonuna tıklayın. Film bilgileri çekilecek ve kuyruğa eklenecektir.
-
-İndirmek istediğiniz videonun yanındaki "Başlat" butonuna tıklayın.
-
-İşlemin durumunu ve ilerlemesini arayüzden canlı olarak takip edin. İndirme tamamlandığında video, downloads klasörüne kaydedilecektir.
-
-💻 Kullanılan Teknolojiler
-Backend: Python, Flask
-
-Web Scraping & Otomasyon: Selenium, Selenium-Wire, BeautifulSoup
-
-Video İndirme: yt-dlp
-
-Frontend: HTML, Tailwind CSS, JavaScript (Fetch API)
-
-Veritabanı: SQLite
-
-Proses Yönetimi: Multiprocessing
-
-Bu proje, MembaCo. tarafından geliştirilmiştir.
+Bu proje, **MembaCo.** tarafından geliştirilmiştir.

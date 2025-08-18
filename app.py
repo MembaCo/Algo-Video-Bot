@@ -12,6 +12,8 @@ import sys
 import subprocess
 import glob
 import re
+import time
+import threading
 
 # Yerel modüllerden importlar
 import config
@@ -24,6 +26,10 @@ logger = setup_logging()
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
+
+# --- Otomatik İndirme için Global Durum ---
+AUTO_DOWNLOAD_ENABLED = False
+# -----------------------------------------
 
 # Flask'in kendi logger'ını bizim yapılandırmamızla entegre et
 if app.logger.handlers:
@@ -45,18 +51,19 @@ def _scrape_from_html(soup):
             "imdb_score": "Bilinmiyor",
             "director": "Bilinmiyor",
             "cast": "Bilinmiyor",
+            "poster_url": "",
         }
-
         header = soup.find("div", class_="sheader")
         if header:
             title_tag = header.find("h1")
             if title_tag:
                 metadata["title"] = title_tag.text.strip()
-
+            poster_div = header.find("div", class_="poster")
+            if poster_div and poster_div.find("img"):
+                metadata["poster_url"] = poster_div.find("img").get("src", "")
         content_div = soup.find("div", class_="wp-content")
         if content_div and content_div.find("p"):
             metadata["description"] = content_div.find("p").text.strip()
-
         custom_fields = soup.find_all("div", class_="custom_fields")
         for field in custom_fields:
             label_tag = field.find("b", class_="variante")
@@ -64,7 +71,6 @@ def _scrape_from_html(soup):
             if label_tag and value_tag:
                 label = label_tag.text.strip().lower()
                 value = value_tag.text.strip()
-
                 if "imdb puanı" in label:
                     imdb_strong_tag = value_tag.find("strong")
                     metadata["imdb_score"] = (
@@ -74,23 +80,18 @@ def _scrape_from_html(soup):
                     metadata["director"] = value
                 elif "oyuncular" in label:
                     metadata["cast"] = value
-
         if header:
             year_tag = header.find("span", class_="C")
             if year_tag and year_tag.find("a"):
                 metadata["year"] = year_tag.find("a").text.strip()
-
             genre_div = header.find("div", class_="sgeneros")
             if genre_div:
                 genres = [a.text.strip() for a in genre_div.find_all("a")]
                 metadata["genre"] = ", ".join(genres)
-
         if "HDFilmcehennemi" in metadata["title"]:
             logger.warning("HTML kazıma jenerik bir başlık buldu, veri geçersiz.")
             return None
-
         return metadata
-
     except Exception:
         logger.error("Yedek HTML kazıma yöntemi sırasında hata oluştu.", exc_info=True)
         return None
@@ -106,12 +107,10 @@ def scrape_metadata(url):
         response = requests.get(url, headers=headers, timeout=20)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-
         json_ld_script = soup.find("script", type="application/ld+json")
         if json_ld_script:
             logger.info(f"JSON-LD verisi bulundu. URL: {url}")
             data = json.loads(json_ld_script.string)
-
             movie_data = None
 
             def find_movie_in_json(item):
@@ -131,7 +130,6 @@ def scrape_metadata(url):
                         break
             else:
                 movie_data = find_movie_in_json(data)
-
             if not movie_data:
                 logger.warning(
                     f"'Movie' tipi bulunamadı. Yedek mekanizma devreye giriyor. URL: {url}"
@@ -149,7 +147,6 @@ def scrape_metadata(url):
                 ):
                     movie_data = data
                     logger.info("Yedek mekanizma ile film verisi bulundu.")
-
             if movie_data:
                 title = movie_data.get("name", "Başlık Bulunamadı")
                 if "HDFilmcehennemi" in title and len(title) < 20:
@@ -173,7 +170,6 @@ def scrape_metadata(url):
                         )
                     elif isinstance(director_data, dict):
                         director = director_data.get("name", "Bilinmiyor")
-
                     metadata = {
                         "title": title,
                         "description": movie_data.get(
@@ -186,15 +182,14 @@ def scrape_metadata(url):
                         "imdb_score": rating.get("ratingValue", "Bilinmiyor"),
                         "director": director,
                         "cast": actors,
+                        "poster_url": movie_data.get("image", ""),
                     }
                     logger.info("JSON-LD ile film verisi başarıyla çekildi.")
                     return metadata
-
         logger.warning(
             f"JSON-LD ile geçerli veri bulunamadı, HTML kazıma yöntemine geçiliyor. URL: {url}"
         )
         return _scrape_from_html(soup)
-
     except requests.exceptions.RequestException:
         logger.error(f"Meta veri çekilirken ağ hatası oluştu: {url}", exc_info=True)
         return None
@@ -203,6 +198,59 @@ def scrape_metadata(url):
             f"Meta veri ayrıştırılırken genel bir hata oluştu: {url}", exc_info=True
         )
         return None
+
+
+def start_worker_process(video_id):
+    p = Process(target=process_video, args=(video_id,))
+    p.start()
+    return p.pid
+
+
+def _start_download_process(video_id):
+    """Bir video indirme işlemini başlatır ve veritabanını günceller."""
+    with app.app_context():
+        db = get_db()
+        video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
+        if not video:
+            logger.error(f"İndirme başlatılamadı: ID {video_id} ile video bulunamadı.")
+            db.close()
+            return
+        pid = start_worker_process(video_id)
+        db.execute(
+            "UPDATE videos SET status = ?, pid = ?, progress = 0, filepath = NULL WHERE id = ?",
+            ("Kaynak aranıyor...", pid, video_id),
+        )
+        db.commit()
+        logger.info(
+            f"ID {video_id} ('{video['title']}') için indirme işlemi başlatıldı. PID: {pid}"
+        )
+        db.close()
+
+
+def auto_download_manager():
+    """Arka planda çalışarak otomatik indirmeleri yöneten thread."""
+    logger.info("Otomatik indirme yöneticisi thread'i başlatıldı.")
+    while True:
+        try:
+            with app.app_context():
+                if AUTO_DOWNLOAD_ENABLED:
+                    db = get_db()
+                    active_download = db.execute(
+                        "SELECT id FROM videos WHERE status = 'İndiriliyor' OR status = 'Kaynak aranıyor...'"
+                    ).fetchone()
+                    if not active_download:
+                        next_video = db.execute(
+                            "SELECT id FROM videos WHERE status = 'Sırada' ORDER BY created_at ASC"
+                        ).fetchone()
+                        if next_video:
+                            logger.info(
+                                f"[Auto-Download] Sırada bekleyen video bulundu (ID: {next_video['id']}). İndirme başlatılıyor."
+                            )
+                            _start_download_process(next_video["id"])
+                    db.close()
+        except Exception as e:
+            logger.error(f"Otomatik indirme yöneticisinde hata: {e}", exc_info=True)
+        time.sleep(config.AUTO_DOWNLOAD_POLL_INTERVAL)
 
 
 @app.before_request
@@ -243,7 +291,7 @@ def index():
     db = get_db()
     videos = db.execute("SELECT * FROM videos ORDER BY created_at DESC").fetchall()
     db.close()
-    return render_template("index.html", videos=videos)
+    return render_template("index.html", videos=videos, version=config.VERSION)
 
 
 @app.route("/add", methods=["POST"])
@@ -252,7 +300,14 @@ def add_video():
     if config.ALLOWED_DOMAIN not in url:
         flash(f"Lütfen geçerli bir {config.ALLOWED_DOMAIN} linki girin.", "warning")
         return redirect(url_for("index"))
-
+    db = get_db()
+    existing_video = db.execute(
+        "SELECT id FROM videos WHERE url = ?", (url,)
+    ).fetchone()
+    if existing_video:
+        flash("Bu video zaten kuyrukta mevcut.", "warning")
+        db.close()
+        return redirect(url_for("index"))
     logger.info(f"Yeni video ekleme isteği alındı: {url}")
     metadata = scrape_metadata(url)
     if not metadata:
@@ -260,13 +315,12 @@ def add_video():
             "Film bilgileri çekilemedi. Lütfen linki kontrol edin veya site yapısı değişmiş olabilir.",
             "danger",
         )
+        db.close()
         return redirect(url_for("index"))
-
-    db = get_db()
     db.execute(
         """
-        INSERT INTO videos (url, status, title, year, genre, description, imdb_score, director, cast) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO videos (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             url,
@@ -278,6 +332,8 @@ def add_video():
             metadata["imdb_score"],
             metadata["director"],
             metadata["cast"],
+            metadata["poster_url"],
+            "hdfilmcehennemi",
         ),
     )
     db.commit()
@@ -287,34 +343,17 @@ def add_video():
     return redirect(url_for("index"))
 
 
-def start_worker_process(video_id):
-    p = Process(target=process_video, args=(video_id,))
-    p.start()
-    return p.pid
-
-
 @app.route("/start/<int:video_id>")
 def start_download(video_id):
     db = get_db()
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not video:
         flash("Video bulunamadı.", "danger")
-        db.close()
-        return redirect(url_for("index"))
-
-    if video["status"] in ["Kaynak aranıyor...", "İndiriliyor"]:
+    elif video["status"] in ["Kaynak aranıyor...", "İndiriliyor"]:
         flash("Bu indirme zaten devam ediyor.", "warning")
     else:
-        pid = start_worker_process(video_id)
-        db.execute(
-            "UPDATE videos SET status = ?, pid = ?, progress = 0, filepath = NULL WHERE id = ?",
-            ("Kaynak aranıyor...", pid, video_id),
-        )
-        db.commit()
+        _start_download_process(video_id)
         flash(f'"{video["title"]}" için indirme başlatıldı.', "info")
-        logger.info(
-            f"ID {video_id} ('{video['title']}') için indirme işlemi başlatıldı. PID: {pid}"
-        )
     db.close()
     return redirect(url_for("index"))
 
@@ -355,7 +394,6 @@ def stop_download(video_id):
                 logger.error(
                     f"İşlem durdurulurken hata oluştu (PID: {pid})", exc_info=True
                 )
-
         db.execute(
             "UPDATE videos SET status = 'Duraklatıldı', pid = NULL WHERE id = ?",
             (video_id,),
@@ -371,11 +409,9 @@ def delete_video(video_id):
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if video and video["pid"]:
         stop_download(video_id)
-
     title_to_log = "Bilinmeyen"
     if video:
         title_to_log = video["title"] or "Bilinmeyen"
-
     db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
     db.commit()
     db.close()
@@ -392,7 +428,6 @@ def delete_file(video_id):
         flash("Video kaydı bulunamadı.", "danger")
         db.close()
         return redirect(url_for("index"))
-
     filepath = video["filepath"]
     if filepath and os.path.exists(filepath):
         try:
@@ -408,11 +443,19 @@ def delete_file(video_id):
             logger.error(f"Dosya silinemedi: {filepath}", exc_info=True)
     else:
         flash("Silinecek dosya bulunamadı veya zaten silinmiş.", "warning")
-        # Dosya yoksa bile veritabanındaki yolu temizle
         db.execute("UPDATE videos SET filepath = NULL WHERE id = ?", (video_id,))
         db.commit()
-
     db.close()
+    return redirect(url_for("index"))
+
+
+@app.route("/toggle_auto_download", methods=["POST"])
+def toggle_auto_download():
+    global AUTO_DOWNLOAD_ENABLED
+    AUTO_DOWNLOAD_ENABLED = not AUTO_DOWNLOAD_ENABLED
+    status = "aktif" if AUTO_DOWNLOAD_ENABLED else "pasif"
+    flash(f"Otomatik indirme {status} hale getirildi.", "info")
+    logger.info(f"Otomatik indirme durumu değiştirildi: {status.upper()}")
     return redirect(url_for("index"))
 
 
@@ -421,21 +464,32 @@ def status_api():
     if not session.get("logged_in"):
         return {}, 401
     db = get_db()
-    videos = db.execute("SELECT id, status, progress, filepath FROM videos").fetchall()
+    videos = db.execute(
+        "SELECT id, status, progress, filepath, poster_url FROM videos"
+    ).fetchall()
     db.close()
-    return {
+    videos_data = {
         v["id"]: {
             "status": v["status"],
             "progress": v["progress"],
             "filepath": v["filepath"],
+            "poster_url": v["poster_url"],
         }
         for v in videos
     }
+    return {"videos": videos_data, "auto_download_enabled": AUTO_DOWNLOAD_ENABLED}
 
 
 if __name__ == "__main__":
     setup_database()
     if not os.path.exists(config.DOWNLOADS_FOLDER):
         os.makedirs(config.DOWNLOADS_FOLDER)
+
+    if os.environ.get("WERKZEUG_RUN_MAIN") is None:
+        auto_download_thread = threading.Thread(
+            target=auto_download_manager, daemon=True
+        )
+        auto_download_thread.start()
+
     logger.info("Uygulama başlatılıyor...")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)
