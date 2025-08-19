@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # .env dosyasındaki değişkenleri yükle
 load_dotenv()
 
-VERSION = "1.2.5"
+VERSION = "1.3.0 - Beta"
 
 # --- Güvenlik Ayarları ---
 # .env dosyasından oku, yoksa varsayılanı kullan

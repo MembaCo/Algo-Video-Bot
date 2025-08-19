@@ -10,7 +10,7 @@ backend/*/__pycache__/
 
 # Veritabanı ve Kalıcı Veriler
 downloads/
-database.*
+database.db
 .env
 
 # Log Dosyaları

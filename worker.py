@@ -13,14 +13,11 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 
-# webdriver_manager artık Docker ortamında kullanılmayacağı için kaldırıldı.
-# from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException
-
-# Yerel modüllerden importlar
 import config
 from logging_config import setup_logging
+from database import get_all_settings
 
 logger = logging.getLogger(__name__)
 
@@ -73,23 +70,26 @@ def find_manifest_url(target_url):
 
     driver = None
     try:
-        # --- GÜNCELLEME ---
-        # ChromeDriverManager'i kullanmak yerine, Dockerfile'da kurduğumuz
-        # ChromeDriver'ın sabit yolunu doğrudan belirtiyoruz.
         service = Service(executable_path="/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
-        # --- GÜNCELLEME SONU ---
 
         wait = WebDriverWait(driver, 30)
         driver.get(target_url)
         play_button_main = wait.until(EC.element_to_be_clickable((By.ID, "fimcnt")))
         driver.execute_script("arguments[0].click();", play_button_main)
+
         iframe_locator = (By.CSS_SELECTOR, ".play-box-iframe iframe")
         wait.until(EC.frame_to_be_available_and_switch_to_it(iframe_locator))
         iframe_src = driver.current_url
+
+        # --- GÜNCELLEME: StaleElementReferenceException Düzeltmesi ---
+        # Butona tıklamadan önce, elementin DOM'da stabil hale gelmesini bekliyoruz.
+        # Standart .click() yerine JavaScript click kullanmak daha güvenilirdir.
         play_button_iframe = wait.until(EC.element_to_be_clickable((By.ID, "player")))
         del driver.requests
-        play_button_iframe.click()
+        driver.execute_script("arguments[0].click();", play_button_iframe)
+        # --- GÜNCELLEME SONU ---
+
         request = driver.wait_for_request(
             r".*(" + "|".join(re.escape(k) for k in config.VIDEO_KEYWORDS) + r").*",
             timeout=20,
@@ -109,12 +109,17 @@ def find_manifest_url(target_url):
 
 
 def download_with_yt_dlp(
-    video_id, manifest_url, headers, cookie_filepath, filename_template
+    video_id,
+    manifest_url,
+    headers,
+    cookie_filepath,
+    download_folder,
+    filename_template,
+    speed_limit,
 ):
     """yt-dlp ile videoyu indirir ve ilerlemeyi veritabanına yazar."""
-    output_template = os.path.join(
-        config.DOWNLOADS_FOLDER, f"{filename_template}.%(ext)s"
-    )
+    output_template = os.path.join(download_folder, f"{filename_template}.%(ext)s")
+
     command = [
         "yt-dlp",
         "--cookies",
@@ -127,6 +132,10 @@ def download_with_yt_dlp(
         "-o",
         output_template,
     ]
+
+    if speed_limit:
+        command.extend(["--limit-rate", speed_limit])
+
     for key, value in headers.items():
         command.extend(["--add-header", f"{key}: {value}"])
     command.append(manifest_url)
@@ -160,15 +169,16 @@ def process_video(video_id):
     global logger
     logger = setup_logging()
 
-    video = None
     conn = None
+    video = None
+    settings = {}
     try:
         conn = sqlite3.connect(config.DATABASE)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        video = cursor.execute(
+        video = conn.execute(
             "SELECT * FROM videos WHERE id = ?", (video_id,)
         ).fetchone()
+        settings = get_all_settings(conn)
     except sqlite3.Error as e:
         logger.error(
             f"ID {video_id} için veritabanından veri okunurken hata: {e}", exc_info=True
@@ -177,9 +187,13 @@ def process_video(video_id):
         if conn:
             conn.close()
 
-    if not video:
-        logger.error(f"Veritabanında video ID {video_id} bulunamadı.")
+    if not video or not settings:
+        logger.error(f"Veritabanında video ID {video_id} veya ayarlar bulunamadı.")
         return
+
+    download_folder = settings.get("DOWNLOADS_FOLDER", "downloads")
+    if not os.path.exists(download_folder):
+        os.makedirs(download_folder)
 
     cookie_filepath = f"cookies_{video_id}.txt"
     try:
@@ -195,8 +209,7 @@ def process_video(video_id):
                     include_subdomains = "TRUE" if domain.startswith(".") else "FALSE"
                     path = cookie.get("path", "/")
                     secure = "TRUE" if cookie.get("secure") else "FALSE"
-                    expiry = cookie.get("expiry")
-                    expiry = int(expiry) if expiry is not None else 0
+                    expiry = int(cookie.get("expiry", 0))
                     name = cookie["name"]
                     value = cookie["value"]
                     f.write(
@@ -204,13 +217,26 @@ def process_video(video_id):
                     )
 
             update_status(video_id, status="İndiriliyor", source_url=manifest_url)
-            title = video["title"] or "Bilinmeyen Film"
-            year = video["year"] or ""
-            genre = video["genre"] or ""
+
+            filename_template_str = settings.get("FILENAME_TEMPLATE", "{title}")
+            try:
+                filename_base = filename_template_str.format(
+                    title=video["title"] or "Bilinmeyen",
+                    year=video["year"] or "YYYY",
+                    genre=video["genre"] or "Tur",
+                    imdb_score=video["imdb_score"] or "N/A",
+                    director=video["director"] or "Yonetmen",
+                )
+            except KeyError as e:
+                logger.warning(
+                    f"Dosya adı şablonunda geçersiz değişken: {e}. Varsayılan kullanılıyor."
+                )
+                filename_base = video["title"] or "Bilinmeyen Film"
 
             def to_ascii_safe(text):
                 text = (
-                    text.replace("ı", "i")
+                    str(text)
+                    .replace("ı", "i")
                     .replace("İ", "I")
                     .replace("ğ", "g")
                     .replace("Ğ", "G")
@@ -231,20 +257,24 @@ def process_video(video_id):
                 text = re.sub(r'[<>:"/\\|?*]', "", text).strip()
                 return text
 
-            clean_title = to_ascii_safe(title)
-            clean_genre = to_ascii_safe(genre)
-            filename_base = f"{clean_title} - {year} - {clean_genre}".strip(" -")
+            safe_filename_base = to_ascii_safe(filename_base)
 
             logger.info(
-                f"ID {video_id}: İndirme başlıyor. Güvenli (ASCII) dosya adı: {filename_base}"
+                f"ID {video_id}: İndirme başlıyor. Dosya adı: {safe_filename_base}"
             )
 
             success, message = download_with_yt_dlp(
-                video_id, manifest_url, headers, cookie_filepath, filename_base
+                video_id,
+                manifest_url,
+                headers,
+                cookie_filepath,
+                download_folder,
+                safe_filename_base,
+                settings.get("SPEED_LIMIT"),
             )
             if success:
                 search_pattern = os.path.join(
-                    config.DOWNLOADS_FOLDER, f"{filename_base}.*"
+                    download_folder, f"{safe_filename_base}.*"
                 )
                 files = glob.glob(search_pattern)
                 if files:
@@ -263,7 +293,7 @@ def process_video(video_id):
                         video_id, status="Hata: Dosya bulunamadı", progress=100
                     )
                     logger.error(
-                        f"ID {video_id}: İndirme başarılı görünse de dosya bulunamadı. Aranan: {search_pattern}"
+                        f"ID {video_id}: Dosya bulunamadı. Aranan: {search_pattern}"
                     )
             else:
                 update_status(video_id, status="Hata: İndirilemedi")

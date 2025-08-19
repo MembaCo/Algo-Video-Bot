@@ -1,31 +1,40 @@
 # @author: MembaCo.
 
-# Temel imaj olarak Python 3.11'in hafif bir sürümünü kullanıyoruz.
-FROM python:3.11-slim
+# Temel imaj olarak Python 3.11'in kararlı (bullseye) sürümünü kullanıyoruz.
+# 'slim' sürümü bazen temel kütüphaneleri eksik bırakabilir.
+FROM python:3.11-bullseye
 
 # Konteyner içindeki çalışma dizinini belirliyoruz.
 WORKDIR /app
 
-# Sistem paket listesini güncelliyor ve gerekli araçları yüklüyoruz.
+# --- GÜNCELLEME: Chrome ve Bağımlılık Kurulumu ---
+# Chrome'un ihtiyaç duyduğu tüm araçları ve kütüphaneleri en baştan kuruyoruz.
 RUN apt-get update && apt-get install -y \
     wget \
+    gnupg \
     unzip \
+    jq \
     --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Google Chrome'un en son stabil sürümünü indirip kuruyoruz.
-RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    # Google Chrome'un resmi GPG anahtarını indirip ekliyoruz.
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg \
+    # Google Chrome'un resmi deposunu sistemin paket kaynaklarına ekliyoruz.
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+    # Paket listesini yeni depoyla birlikte güncelliyoruz.
     && apt-get update \
-    && apt-get install -y ./google-chrome-stable_current_amd64.deb \
-    --no-install-recommends \
-    && rm -f google-chrome-stable_current_amd64.deb
+    # Google Chrome'u resmi depodan kuruyoruz. Bu komut, GEREKLİ TÜM KÜTÜPHANELERİ OTOMATİK OLARAK YÜKLER.
+    && apt-get install -y google-chrome-stable \
+    # İndirme sonrası gereksiz dosyaları temizliyoruz.
+    && rm -rf /var/lib/apt/lists/*
+# --- GÜNCELLEME SONU ---
 
-# --- GÜNCELLEME ---
-# ChromeDriver'ı otomatik bulmak yerine, bilinen stabil bir sürümü doğrudan indiriyoruz.
-# Bu yöntem, dış API değişikliklerine karşı çok daha dayanıklıdır.
-RUN wget -q --continue -P /tmp https://storage.googleapis.com/chrome-for-testing-public/126.0.6478.126/linux64/chromedriver-linux64.zip \
+# --- GÜNCELLEME: Uyumlu ChromeDriver Kurulumu ---
+# Az önce kurduğumuz Chrome'un tam sürümünü alıp ona uygun ChromeDriver'ı indiriyoruz.
+RUN CHROME_VERSION=$(google-chrome --product-version) \
+    && echo "Kurulan Chrome Sürümü: ${CHROME_VERSION}" \
+    && LATEST_VERSION=$(wget -q -O - "https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone-with-downloads.json" | jq -r --arg ver "${CHROME_VERSION}" '.milestones[$ver | split(".")[0]].version') \
+    && echo "Uyumlu ChromeDriver Sürümü: ${LATEST_VERSION}" \
+    && wget -q --continue -P /tmp "https://storage.googleapis.com/chrome-for-testing-public/${LATEST_VERSION}/linux64/chromedriver-linux64.zip" \
     && unzip -q /tmp/chromedriver-linux64.zip -d /usr/bin \
-    && chmod +x /usr/bin/chromedriver-linux64/chromedriver \
     && ln -s /usr/bin/chromedriver-linux64/chromedriver /usr/bin/chromedriver \
     && rm /tmp/chromedriver-linux64.zip
 # --- GÜNCELLEME SONU ---

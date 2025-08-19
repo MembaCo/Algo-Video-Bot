@@ -12,7 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
-from database import get_db
+from database import get_db, get_setting
 from worker import process_video
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,6 @@ def _scrape_from_html(soup):
 def scrape_metadata(url):
     """
     BeautifulSoup ile bir URL'den detaylı film bilgilerini çeker.
-    Önce JSON-LD dener, başarısız olursa HTML kazımayı dener.
     """
     try:
         headers = {"User-Agent": config.USER_AGENT}
@@ -104,7 +103,6 @@ def scrape_metadata(url):
                     return item
                 return None
 
-            # --- GÜNCELLEME: @graph yapısını handle etmek için ---
             items_to_search = []
             if (
                 isinstance(data, dict)
@@ -121,7 +119,6 @@ def scrape_metadata(url):
                 movie_data = find_movie_in_json(item)
                 if movie_data:
                     break
-            # --- GÜNCELLEME SONU ---
 
             if movie_data:
                 title = movie_data.get("name", "Başlık Bulunamadı")
@@ -188,10 +185,7 @@ def add_video_to_queue(url):
         )
 
     db.execute(
-        """
-        INSERT INTO videos (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+        "INSERT INTO videos (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             url,
             "Sırada",
@@ -212,9 +206,7 @@ def add_video_to_queue(url):
 
 
 def scrape_movie_links_from_list_page(list_url):
-    """
-    Verilen bir liste (kategori, arşiv vb.) sayfasındaki tüm film linklerini kazır.
-    """
+    """Bir liste sayfasındaki tüm film linklerini kazır."""
     logger.info(f"Toplu liste sayfasından film linkleri çekiliyor: {list_url}")
     try:
         headers = {"User-Agent": config.USER_AGENT}
@@ -229,9 +221,7 @@ def scrape_movie_links_from_list_page(list_url):
                 movie_links.append(link_tag["href"])
 
         if not movie_links:
-            logger.warning(
-                f"Hiç film linki bulunamadı. Site yapısı değişmiş olabilir. Kullanılan Selector: 'article.item > a'"
-            )
+            logger.warning(f"Hiç film linki bulunamadı. Site yapısı değişmiş olabilir.")
 
         logger.info(f"{len(movie_links)} adet film linki bulundu.")
         return movie_links, None
@@ -248,44 +238,37 @@ def scrape_movie_links_from_list_page(list_url):
 
 
 def add_videos_from_list_page_async(app, list_url):
-    """
-    Arka planda çalışarak bir liste sayfasındaki tüm filmleri kuyruğa ekler.
-    Artık 'app' nesnesini parametre olarak alıyor.
-    """
+    """Arka planda bir liste sayfasındaki tüm filmleri kuyruğa ekler."""
     with app.app_context():
         movie_links, error = scrape_movie_links_from_list_page(list_url)
         if error:
             logger.error(f"Toplu ekleme işlemi başarısız: {error}")
             return
 
-        added_count = 0
-        skipped_count = 0
-        failed_count = 0
-
+        added, skipped, failed = 0, 0, 0
         for link in movie_links:
             try:
                 success, message = add_video_to_queue(link)
                 if success:
-                    added_count += 1
+                    added += 1
                 elif "zaten kuyrukta mevcut" in message.lower():
-                    skipped_count += 1
+                    skipped += 1
                 else:
-                    failed_count += 1
+                    failed += 1
             except Exception:
-                failed_count += 1
+                failed += 1
                 logger.error(
                     f"Toplu ekleme sırasında bir video ({link}) işlenirken hata oluştu.",
                     exc_info=True,
                 )
 
         logger.info(
-            f"Toplu ekleme işlemi tamamlandı. "
-            f"Eklenen: {added_count}, Atlanan (zaten mevcut): {skipped_count}, Başarısız: {failed_count}"
+            f"Toplu ekleme tamamlandı. Eklenen: {added}, Atlanan: {skipped}, Başarısız: {failed}"
         )
 
 
 def start_download_for_video(video_id):
-    """Belirtilen video ID'si için indirme işlemini başlatır."""
+    """Bir indirme işlemini başlatır."""
     db = get_db()
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not video:
@@ -303,13 +286,13 @@ def start_download_for_video(video_id):
     )
     db.commit()
     logger.info(
-        f"ID {video_id} ('{video['title']}') için indirme işlemi başlatıldı. PID: {pid}"
+        f"ID {video_id} ('{video['title']}') için indirme başlatıldı. PID: {pid}"
     )
     return True, f'"{video["title"]}" için indirme başlatıldı.'
 
 
 def stop_download_for_video(video_id):
-    """Belirtilen video ID'sine ait indirme işlemini durdurur."""
+    """Bir indirme işlemini durdurur."""
     db = get_db()
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not (video and video["pid"]):
@@ -329,9 +312,7 @@ def stop_download_for_video(video_id):
         message = "İndirme durdurma isteği gönderildi."
     except (ProcessLookupError, subprocess.CalledProcessError):
         message = "İşlem zaten sonlanmış."
-        logger.warning(
-            f"Durdurulmaya çalışılan işlem (PID: {pid}) bulunamadı veya zaten sonlanmış."
-        )
+        logger.warning(f"Durdurulmaya çalışılan işlem (PID: {pid}) bulunamadı.")
     except OSError as e:
         message = f"İşlem durdurulurken bir hata oluştu: {e}"
         logger.error(f"İşlem durdurulurken hata oluştu (PID: {pid})", exc_info=True)
@@ -345,16 +326,13 @@ def stop_download_for_video(video_id):
 
 
 def delete_video_record(video_id):
-    """Bir videonun veritabanı kaydını siler (varsa çalışan işlemi de durdurur)."""
+    """Bir videonun veritabanı kaydını siler."""
     db = get_db()
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if video and video["pid"]:
         stop_download_for_video(video_id)
 
-    title_to_log = "Bilinmeyen"
-    if video:
-        title_to_log = video["title"] or "Bilinmeyen"
-
+    title_to_log = video["title"] if video else "Bilinmeyen"
     db.execute("DELETE FROM videos WHERE id = ?", (video_id,))
     db.commit()
     logger.info(f"ID {video_id} ('{title_to_log}') veritabanından silindi.")
@@ -362,7 +340,7 @@ def delete_video_record(video_id):
 
 
 def delete_video_file(video_id):
-    """İndirilmiş bir video dosyasını diskten kalıcı olarak siler."""
+    """İndirilmiş bir video dosyasını diskten siler."""
     db = get_db()
     video = db.execute("SELECT * FROM videos WHERE id = ?", (video_id,)).fetchone()
     if not video:
@@ -391,25 +369,22 @@ def get_all_videos_status():
     videos = db.execute(
         "SELECT id, status, progress, filepath, poster_url FROM videos"
     ).fetchall()
-    videos_data = {
-        v["id"]: {
-            "status": v["status"],
-            "progress": v["progress"],
-            "filepath": v["filepath"],
-            "poster_url": v["poster_url"],
-        }
-        for v in videos
-    }
-    return videos_data
+    return {v["id"]: dict(v) for v in videos}
 
 
 def run_auto_download_cycle():
     """Otomatik indirme yöneticisinin bir döngüsünü çalıştırır."""
     db = get_db()
-    active_download = db.execute(
-        "SELECT id FROM videos WHERE status = 'İndiriliyor' OR status = 'Kaynak aranıyor...'"
-    ).fetchone()
-    if not active_download:
+    try:
+        concurrent_limit = int(get_setting("CONCURRENT_DOWNLOADS", db))
+    except (ValueError, TypeError):
+        concurrent_limit = 1
+
+    active_downloads = db.execute(
+        "SELECT COUNT(id) FROM videos WHERE status = 'İndiriliyor' OR status = 'Kaynak aranıyor...'"
+    ).fetchone()[0]
+
+    if active_downloads < concurrent_limit:
         next_video = db.execute(
             "SELECT id FROM videos WHERE status = 'Sırada' ORDER BY created_at ASC"
         ).fetchone()

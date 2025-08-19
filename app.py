@@ -16,27 +16,32 @@ from flask import (
     jsonify,
     g,
 )
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
-# Yerel modüllerden importlar
 import config
-from database import get_db, setup_database, close_db
+
+# Veritabanı importlarını güncelliyoruz
+from database import (
+    get_db,
+    setup_database,
+    close_db,
+    init_settings,
+    get_all_settings,
+    update_setting,
+    get_setting,
+)
 from logging_config import setup_logging
 import services
 
-# Loglamayı başlat
 logger = setup_logging()
-
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
-app.teardown_appcontext(close_db)  # Her istek sonunda veritabanı bağlantısını kapat
+app.teardown_appcontext(close_db)
 
-# Flask'in kendi logger'ını bizim yapılandırmamızla entegre et
 if app.logger.handlers:
     app.logger.removeHandler(app.logger.handlers[0])
 app.logger = logger
 
-# --- Otomatik İndirme Durumu ---
 auto_download_manager_state = {"enabled": False, "thread": None}
 
 
@@ -66,8 +71,12 @@ def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        if username == config.ADMIN_USERNAME and check_password_hash(
-            config.ADMIN_PASSWORD_HASH, password
+        password_hash = get_setting("ADMIN_PASSWORD_HASH")
+
+        if (
+            username == config.ADMIN_USERNAME
+            and password_hash
+            and check_password_hash(password_hash, password)
         ):
             session["logged_in"] = True
             logger.info(f"Kullanıcı '{username}' başarıyla giriş yaptı.")
@@ -111,8 +120,6 @@ def add_list():
         flash(f"Lütfen geçerli bir {config.ALLOWED_DOMAIN} linki girin.", "warning")
         return redirect(url_for("index"))
 
-    # --- DEĞİŞİKLİK BURADA ---
-    # Arka plan işlemine 'app' nesnesini parametre olarak veriyoruz.
     thread = threading.Thread(
         target=services.add_videos_from_list_page_async, args=(app, list_url)
     )
@@ -124,6 +131,44 @@ def add_list():
         "info",
     )
     return redirect(url_for("index"))
+
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    db = get_db()
+    if request.method == "POST":
+        # Ayarları güncelle
+        update_setting("DOWNLOADS_FOLDER", request.form["downloads_folder"], db)
+        update_setting("FILENAME_TEMPLATE", request.form["filename_template"], db)
+        update_setting("CONCURRENT_DOWNLOADS", request.form["concurrent_downloads"], db)
+        update_setting("SPEED_LIMIT", request.form["speed_limit"], db)
+
+        # Parola değişikliği
+        current_password = request.form.get("current_password")
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+
+        if current_password or new_password or confirm_password:
+            password_hash = get_setting("ADMIN_PASSWORD_HASH", db)
+            if not (current_password and new_password and confirm_password):
+                flash(
+                    "Parolayı değiştirmek için lütfen tüm alanları doldurun.", "warning"
+                )
+            elif not check_password_hash(password_hash, current_password):
+                flash("Mevcut parolanız hatalı!", "danger")
+            elif new_password != confirm_password:
+                flash("Yeni parolalar eşleşmiyor!", "danger")
+            else:
+                new_hash = generate_password_hash(new_password)
+                update_setting("ADMIN_PASSWORD_HASH", new_hash, db)
+                flash("Parolanız başarıyla güncellendi.", "success")
+
+        db.commit()
+        flash("Ayarlar başarıyla kaydedildi.", "success")
+        return redirect(url_for("settings"))
+
+    current_settings = get_all_settings(db)
+    return render_template("settings.html", settings=current_settings)
 
 
 @app.route("/start/<int:video_id>", methods=["POST"])
@@ -186,9 +231,14 @@ def status_api():
 
 
 if __name__ == "__main__":
-    setup_database()
-    if not os.path.exists(config.DOWNLOADS_FOLDER):
-        os.makedirs(config.DOWNLOADS_FOLDER)
+    # Uygulama bağlamı içinde veritabanı ve ayarları hazırla
+    with app.app_context():
+        setup_database()
+        init_settings()
+        # İndirme klasörünün varlığını kontrol et ve gerekirse oluştur
+        downloads_folder = get_setting("DOWNLOADS_FOLDER")
+        if not os.path.exists(downloads_folder):
+            os.makedirs(downloads_folder)
 
     logger.info("Uygulama başlatılıyor...")
     app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)
