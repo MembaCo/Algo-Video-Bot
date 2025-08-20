@@ -97,7 +97,7 @@ touch database.db app.log
 
 Docker İmajını Çekin (Pull):
 
-docker pull ghcr.io/MembaCo/Algo-Video-Bot:latest
+docker pull ghcr.io/membaco/algo-video-bot:latest
 
 Konteyneri Çalıştırın:
 
@@ -110,7 +110,7 @@ docker run -d \
   -v ./app.log:/app/app.log \
   --env-file ./.env \
   --shm-size=2g \
-  ghcr.io/MembaCo/Algo-Video-Bot:latest
+  ghcr.io/membaco/algo-video-bot:latest
 
 Erişim: Artık uygulamaya http://SUNUCU_IP_ADRESINIZ:5000 adresinden erişebilirsiniz.
 
