@@ -98,4 +98,69 @@ Bu proje, modern ve dinamik video sitelerinden (şu anda `hdfilmcehennemi.ltd` d
 - **Proses Yönetimi:** Multiprocessing, Threading
 - **Loglama:** Python `logging` modülü
 
+🐳 Docker ile Dağıtım (Deployment)
+Bu proje, GitHub Actions kullanılarak otomatik olarak bir Docker imajı olarak derlenir ve GitHub Container Registry (GHCR) üzerinde yayınlanır. Bu sayede uygulamayı herhangi bir sunucuda kolayca çalıştırabilirsiniz.
+
+Sunucuda Çalıştırma Adımları
+Docker Kurulumu: Sunucunuzda Docker'ın kurulu olduğundan emin olun.
+
+Gerekli Dosyaları Hazırlayın: Uygulamanın verilerini (veritabanı, indirilen videolar, loglar) kalıcı olarak saklamak için bir klasör oluşturun.
+
+# Proje için bir klasör oluşturun ve içine girin
+
+mkdir algo-video-bot
+cd algo-video-bot
+
+# Gerekli alt klasörü ve boş dosyaları oluşturun
+
+mkdir downloads
+touch database.db
+touch app.log
+
+.env Dosyasını Oluşturun: Uygulamanın yapılandırma ayarları için bir .env dosyası oluşturun.
+
+nano .env
+
+İçeriğini aşağıdaki gibi doldurun ve güçlü bir parola hash'i ile güncelleyin:
+
+SECRET_KEY="COK_GIZLI_VE_GUCLU_BIR_ANAHTAR_BURAYA_YAZIN"
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD_HASH="scrypt:32768:8:1$....BURAYA_URETTIGINIZ_HASH_GELECEK...."
+
+Docker İmajını Çekin (Pull): Projenin en güncel imajını GHCR'den çekin.
+
+docker pull ghcr.io/MembaCo/Algo-Video-Bot:latest
+
+Konteyneri Çalıştırın: Aşağıdaki docker run komutu ile uygulamayı başlatın. Bu komut, oluşturduğunuz dosya ve klasörleri konteynere bağlayacak ve .env dosyasını kullanacaktır.
+
+docker run -d \
+  -p 5000:5000 \
+  --name algo-video-bot \
+  --restart unless-stopped \
+  -v ./downloads:/app/downloads \
+  -v ./database.db:/app/database.db \
+  -v ./app.log:/app/app.log \
+  --env-file ./.env \
+  --shm-size=2g \
+  ghcr.io/MembaCo/Algo-Video-Bot:latest
+
+Erişim: Artık uygulamaya http://SUNUCU_IP_ADRESINIZ:5000 adresinden erişebilirsiniz.
+
+Yönetim Komutları
+Logları Kontrol Etme:
+
+docker logs -f algo-video-bot
+
+Konteyneri Durdurma:
+
+docker stop algo-video-bot
+
+Konteyneri Başlatma:
+
+docker start algo-video-bot
+
+Konteyneri Silme:
+
+docker rm algo-video-bot
+
 Bu proje, **MembaCo.** tarafından geliştirilmiştir.
