@@ -1,137 +1,105 @@
-# Flask ile Gelişmiş Video İndirme Yöneticisi v1.0.0
+<p align="center">
+<img src="https://placehold.co/800x200/111827/7c3aed?text=Algo-Video-Bot" alt="Algo-Video-Bot Banner">
+</p>
 
-Bu proje, modern ve dinamik video sitelerinden (şu anda `hdfilmcehennemi.ltd` desteklenmektedir) içerik indirmeyi otomatikleştiren, web tabanlı bir yönetim paneline sahip gelişmiş bir Python uygulamasıdır. Kullanıcıların video linklerini ekleyip indirme işlemlerini (başlatma, durdurma, silme, otomatik indirme) bir web arayüzü üzerinden yönetmelerini sağlar.
+<h1 align="center">Algo-Video-Bot: Gelişmiş Video İndirme Yöneticisi</h1>
 
-![Uygulama Arayüzü](https://i.imgur.com/example.png)
-*(Not: Bu kısmı kendi ekran görüntünüzün URL'si ile güncelleyebilirsiniz.)*
+<p align="center">
+Modern ve dinamik video sitelerinden içerik indirmeyi otomatikleştiren, web tabanlı bir yönetim paneli.
+</p>
 
----
+<p align="center">
+<a href="https://github.com/MembaCo/Algo-Video-Bot/actions/workflows/docker-publish.yml">
+<img src="https://github.com/MembaCo/Algo-Video-Bot/actions/workflows/docker-publish.yml/badge.svg" alt="Docker Image CI">
+</a>
+<a href="https://github.com/MembaCo/Algo-Video-Bot/blob/main/LICENSE">
+<img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+</a>
+</p>
 
-## 🚀 Temel Özellikler
+Algo-Video-Bot, modern ve dinamik video sitelerinden içerik indirmeyi otomatikleştiren, web tabanlı bir yönetim paneline sahip gelişmiş bir Python uygulamasıdır. Kullanıcıların video linklerini (tek tek veya toplu olarak) ekleyip indirme işlemlerini (başlatma, durdurma, silme, otomatik indirme) modern bir koyu tema arayüzü üzerinden yönetmelerini sağlar.
 
-- **Modern Web Arayüzü:** Videoları eklemek, kuyruğu yönetmek ve indirme durumlarını canlı olarak izlemek için kullanıcı dostu bir panel.
-- **Güvenli Giriş Sistemi:** Panele erişimi korumak için basit kullanıcı adı ve şifre doğrulama.
-- **Akıllı Bilgi Çekme:** Sıraya eklenen her video için film adı, yılı, türü, özeti, IMDb puanı, yönetmen, oyuncular ve poster resmi gibi zengin meta verileri otomatik olarak siteden çeker.
-- **Otomatik İndirme Yöneticisi:** Kuyruğa eklenen videoları, aktif edildiğinde sırayla ve otomatik olarak indirir.
-- **Gelişmiş İndirme Kontrolü:**
-  - İndirmeleri tek bir tıkla başlatın.
-  - Devam eden indirmeleri durdurun (duraklatın).
-  - Kuyruktaki kayıtları veya tamamlanmış indirmelerin sadece kaydını silin.
-  - **Disk'ten Sil:** İndirilmiş video dosyasını doğrudan arayüzden kalıcı olarak silin.
-- **Canlı Durum Takibi:** Web arayüzü, indirme durumunu (Kaynak aranıyor..., İndiriliyor, Tamamlandı, Hata) ve indirme ilerlemesini (%) anlık olarak günceller.
-- **Arka Plan İşlemleri:** Uzun süren indirme işlemleri, web arayüzünün donmasını engellemek için arka planda ayrı prosesler (`multiprocessing`) olarak çalışır.
-- **Dayanıklı Web Kazıma (Scraping):**
-  - Site yapısı değişikliklerine karşı hibrit bir yaklaşım kullanır: Öncelikli olarak güvenilir **JSON-LD** verisini okur, başarısız olursa standart **HTML** etiketlerini analiz eder.
-  - `Selenium-wire` kullanarak JavaScript ile korunan ve dinamik olarak yüklenen video kaynaklarını bulur.
-- **Güvenilir Video İndirme:**
-  - `yt-dlp` entegrasyonu ile en karmaşık video akışlarını (`.m3u8` vb.) indirir.
-  - Sunucu taraflı korumaları (`403 Forbidden` vb.) aşmak için tarayıcıdan aldığı **çerez (cookie) ve header** bilgilerini otomatik olarak kullanır.
-- **Modüler ve Genişletilebilir Mimari:** Proje, gelecekte farklı video siteleri için yeni modüller eklemeyi kolaylaştıracak şekilde tasarlanmıştır.
+Proje, Docker ile paketlenmiş olup, GitHub Actions aracılığıyla otomatik olarak derlenir ve herhangi bir sunucuda veya CasaOS gibi platformlarda kolayca dağıtılabilir.
 
----
+🚀 Temel Özellikler
+Modern ve Koyu Arayüz: Videoları eklemek, kuyruğu yönetmek ve indirme durumlarını canlı olarak izlemek için kullanıcı dostu bir panel.
 
-## 🛠️ Proje Mimarisi
+Güvenli ve Yönetilebilir Giriş: Panele erişimi korumak için hash'lenmiş parola sistemi ve arayüzden parola değiştirme imkanı.
 
-- **`app.py`**: Ana Flask uygulaması. Web sunucusunu çalıştırır, kullanıcı arayüzünü sunar, veritabanı işlemlerini yönetir ve arka plan indirme proseslerini tetikler. Otomatik indirme yöneticisini barındırır.
-- **`worker.py`**: Arka plan işçisi. `app.py` tarafından her bir indirme için özel olarak çağrılır. Selenium ile video kaynağını bulur ve `yt-dlp` ile indirme işlemini gerçekleştirir.
-- **`config.py`**: Tüm yapılandırma ayarlarının (giriş bilgileri, veritabanı adı, versiyon vb.) merkezileştirildiği dosya.
-- **`database.py`**: Veritabanı bağlantısı ve kurulum mantığını içeren modül.
-- **`logging_config.py`**: Tüm uygulama için merkezi loglama yapılandırmasını yönetir. Logları hem konsola hem de `app.log` dosyasına yazar.
-- **`templates/`**: Web arayüzünü oluşturan HTML şablonlarını içerir.
-- **`database.db`**: İndirme kuyruğundaki videoların bilgilerini ve durumlarını saklayan SQLite veritabanı.
-- **`downloads/`**: İndirilen videoların kaydedildiği klasör.
+Akıllı Bilgi Çekme: Sıraya eklenen her video için film adı, yılı, türü, özeti, IMDb puanı, yönetmen, oyuncular ve poster resmi gibi zengin meta verileri otomatik olarak siteden çeker.
 
----
+Esnek Video Ekleme:
 
-## ⚙️ Kurulum ve Çalıştırma
+Tekli Ekleme: Tek bir film URL'si ile video ekleme.
 
-1. **Projeyi Klonlayın:**
+Toplu Ekleme: Bir kategori veya arşiv sayfasının URL'si ile o sayfadaki tüm videoları tek seferde kuyruğa ekleme.
 
-    ```bash
-    git clone [https://github.com/kullanici-adiniz/proje-adiniz.git](https://github.com/kullanici-adiniz/proje-adiniz.git)
-    cd proje-adiniz
-    ```
+Gelişmiş Ayarlar Paneli:
 
-2. **Gerekli Kütüphaneleri Yükleyin:**
-    *(Bir sanal ortam (virtual environment) oluşturmanız şiddetle tavsiye edilir.)*
+İndirme klasörünü, dosya adı şablonunu, eşzamanlı indirme sayısını ve hız limitini arayüzden yönetme.
 
-    ```bash
-    # Sanal ortam oluşturma (isteğe bağlı ama önerilir)
-    python -m venv venv
-    source venv/bin/activate  # Linux/macOS için
-    # venv\Scripts\activate    # Windows için
+Otomatik İndirme Yöneticisi: Kuyruğa eklenen videoları, aktif edildiğinde sırayla ve belirlenen eşzamanlı indirme limitine göre otomatik olarak indirir.
 
-    # Gerekli kütüphaneleri yükle
-    pip install -r requirements.txt
-    ```
+Dayanıklı Web Kazıma (Scraping):
 
-3. **Yönetici Bilgilerini Ayarlayın:**
-    `config.py` dosyasını açın ve `ADMIN_USERNAME` ile `ADMIN_PASSWORD` değişkenlerini kendi istediğiniz bilgilerle güncelleyin.
+Site yapısı değişikliklerine karşı hibrit bir yaklaşım kullanır: Öncelikli olarak güvenilir JSON-LD verisini okur, başarısız olursa standart HTML etiketlerini analiz eder.
 
-4. **Uygulamayı Başlatın:**
+Selenium-wire kullanarak JavaScript ile korunan ve dinamik olarak yüklenen video kaynaklarını bulur.
 
-    ```bash
-    python app.py
-    ```
+Güvenilir Video İndirme:
 
-    Uygulama, varsayılan olarak `http://127.0.0.1:5000` adresinde çalışmaya başlayacaktır.
+yt-dlp entegrasyonu ile en karmaşık video akışlarını (.m3u8 vb.) indirir.
 
----
+Docker ile Kolay Dağıtım: GitHub Actions ile otomatik olarak derlenen Docker imajı sayesinde tek komutla kurulum ve çalıştırma.
 
-## 🖥️ Nasıl Kullanılır?
+⚙️ Kurulum ve Çalıştırma
+Yerel Makine (Geliştirme için)
+Projeyi Klonlayın:
 
-1. Tarayıcınızı açın ve `http://127.0.0.1:5000` adresine gidin.
-2. Belirlediğiniz kullanıcı adı ve şifre ile giriş yapın.
-3. İndirmek istediğiniz `hdfilmcehennemi.ltd` linkini forma yapıştırın ve "Sıraya Ekle" butonuna tıklayın.
-4. Videolarınız kuyruğa eklenecektir. İsterseniz "Otomatik İndirmeyi Başlat" butonuna tıklayarak tüm kuyruğun sırayla indirilmesini sağlayabilir veya her video için manuel olarak "Başlat" butonunu kullanabilirsiniz.
-5. İşlemin durumunu ve ilerlemesini arayüzden canlı olarak takip edin.
+git clone <https://github.com/MembaCo/Algo-Video-Bot.git>
+cd Algo-Video-Bot
 
----
+Gerekli Kütüphaneleri Yükleyin: (Sanal ortam kullanılması tavsiye edilir)
 
-## 💻 Kullanılan Teknolojiler
+pip install -r requirements.txt
 
-- **Backend:** Python, Flask
-- **Web Scraping & Otomasyon:** Selenium, Selenium-Wire, BeautifulSoup
-- **Video İndirme:** yt-dlp
-- **Frontend:** HTML, Tailwind CSS, JavaScript (Fetch API)
-- **Veritabanı:** SQLite
-- **Proses Yönetimi:** Multiprocessing, Threading
-- **Loglama:** Python `logging` modülü
+.env Dosyasını Oluşturun: Proje ana dizininde .env adında bir dosya oluşturun.
 
-🐳 Docker ile Dağıtım (Deployment)
-Bu proje, GitHub Actions kullanılarak otomatik olarak bir Docker imajı olarak derlenir ve GitHub Container Registry (GHCR) üzerinde yayınlanır. Bu sayede uygulamayı herhangi bir sunucuda kolayca çalıştırabilirsiniz.
+Parola Hash'i Üretin: Terminalde aşağıdaki komutları çalıştırarak güvenli bir parola hash'i oluşturun ve çıktıyı kopyalayın.
 
-Sunucuda Çalıştırma Adımları
-Docker Kurulumu: Sunucunuzda Docker'ın kurulu olduğundan emin olun.
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('SENIN_GUVENLI_PAROLAN'))"
 
-Gerekli Dosyaları Hazırlayın: Uygulamanın verilerini (veritabanı, indirilen videolar, loglar) kalıcı olarak saklamak için bir klasör oluşturun.
-
-# Proje için bir klasör oluşturun ve içine girin
-
-mkdir algo-video-bot
-cd algo-video-bot
-
-# Gerekli alt klasörü ve boş dosyaları oluşturun
-
-mkdir downloads
-touch database.db
-touch app.log
-
-.env Dosyasını Oluşturun: Uygulamanın yapılandırma ayarları için bir .env dosyası oluşturun.
-
-nano .env
-
-İçeriğini aşağıdaki gibi doldurun ve güçlü bir parola hash'i ile güncelleyin:
+.env Dosyasını Doldurun:
 
 SECRET_KEY="COK_GIZLI_VE_GUCLU_BIR_ANAHTAR_BURAYA_YAZIN"
 ADMIN_USERNAME="admin"
-ADMIN_PASSWORD_HASH="scrypt:32768:8:1$....BURAYA_URETTIGINIZ_HASH_GELECEK...."
+ADMIN_PASSWORD_HASH="<BURAYA_KOPYALADIGINIZ_HASH_GELECEK>"
 
-Docker İmajını Çekin (Pull): Projenin en güncel imajını GHCR'den çekin.
+Uygulamayı Başlatın:
+
+python app.py
+
+Uygulama, varsayılan olarak <http://127.0.0.1:5000> adresinde çalışmaya başlayacaktır.
+
+🐳 Docker ile Dağıtım (Tavsiye Edilen)
+Bu proje, GitHub Actions kullanılarak otomatik olarak bir Docker imajı olarak derlenir ve GitHub Container Registry (GHCR) üzerinde yayınlanır.
+
+Standart Sunucu Kurulumu
+Docker Kurulumu: Sunucunuzda Docker'ın kurulu olduğundan emin olun.
+
+Gerekli Dosyaları Hazırlayın:
+
+mkdir algo-video-bot && cd algo-video-bot
+mkdir downloads
+touch database.db app.log
+
+.env Dosyasını Oluşturun: Yukarıdaki "Yerel Kurulum" bölümünde anlatıldığı gibi .env dosyanızı oluşturun ve doldurun.
+
+Docker İmajını Çekin (Pull):
 
 docker pull ghcr.io/MembaCo/Algo-Video-Bot:latest
 
-Konteyneri Çalıştırın: Aşağıdaki docker run komutu ile uygulamayı başlatın. Bu komut, oluşturduğunuz dosya ve klasörleri konteynere bağlayacak ve .env dosyasını kullanacaktır.
+Konteyneri Çalıştırın:
 
 docker run -d \
   -p 5000:5000 \
@@ -146,21 +114,76 @@ docker run -d \
 
 Erişim: Artık uygulamaya http://SUNUCU_IP_ADRESINIZ:5000 adresinden erişebilirsiniz.
 
-Yönetim Komutları
-Logları Kontrol Etme:
+CasaOS Kurulumu
+App Store'u Aç: CasaOS arayüzünde "App Store"a gidin.
 
-docker logs -f algo-video-bot
+Custom Install (Özel Kurulum): Sağ üst köşedeki "Custom Install" butonuna tıkla.
 
-Konteyneri Durdurma:
+İçe Aktar (Import): Açılan pencerede "Import" seçeneğine tıkla.
 
-docker stop algo-video-bot
+Yapılandırmayı Yapıştır: Aşağıdaki docker-compose.yml kodunun tamamını kopyala ve metin kutusuna yapıştır. Ardından "Submit" butonuna bas.
 
-Konteyneri Başlatma:
+services:
+  algo-video-bot:
+    image: ghcr.io/membaco/algo-video-bot:latest
+    container_name: algo-video-bot
+    ports:
+      - 5000:5000
+    volumes:
+      - type: bind
+        source: /DATA/AppData/algo-video-bot/downloads
+        target: /app/downloads
+      - type: bind
+        source: /DATA/AppData/algo-video-bot/database.db
+        target: /app/database.db
+      - type: bind
+        source: /DATA/AppData/algo-video-bot/app.log
+        target: /app/app.log
+    environment:
+      - SECRET_KEY= # Buraya çok gizli ve rastgele bir anahtar yazın
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD_HASH= # Buraya ürettiğiniz parola hash'ini yapıştırın
+    restart: unless-stopped
+    shm_size: 2g
+    x-casaos:
+      architectures:
+        - amd64
+      main: algo-video-bot
+      description:
+        en_us: Web tabanlı video indirme yöneticisi.
+      tagline:
+        en_us: Kişisel Video İndirme Yöneticiniz
+      developer: MembaCo
+      author: MembaCo
+      icon: <https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/movie-clapper.png>
+      title:
+        en_us: Algo Video Bot
+      category: Utilities
+      port_map: "5000"
 
-docker start algo-video-bot
+Ayarları Doldur: CasaOS, yapılandırmayı okuyacak ve sana doldurman için alanlar gösterecektir:
 
-Konteyneri Silme:
+SECRET_KEY: Bu alana, bir parola üretici kullanarak oluşturduğun uzun ve rastgele bir metin yapıştır.
 
-docker rm algo-video-bot
+ADMIN_PASSWORD_HASH: Bu alana, daha önce ürettiğin parola hash'ini yapıştır.
 
-Bu proje, **MembaCo.** tarafından geliştirilmiştir.
+Kurulumu Tamamla: Tüm alanları doldurduktan sonra sağ alttaki "Install" butonuna bas.
+
+💻 Kullanılan Teknolojiler
+Backend: Python, Flask
+
+Web Scraping & Otomasyon: Selenium, Selenium-Wire, BeautifulSoup
+
+Video İndirme: yt-dlp
+
+Frontend: HTML, Tailwind CSS, JavaScript (Fetch API)
+
+Veritabanı: SQLite
+
+Proses Yönetimi: Multiprocessing, Threading
+
+Dağıtım: Docker, GitHub Actions
+
+<p align="center">
+Bu proje, <strong>MembaCo.</strong> tarafından geliştirilmiştir.
+</p>
