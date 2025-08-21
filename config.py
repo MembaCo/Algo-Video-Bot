@@ -20,8 +20,9 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 # print(generate_password_hash('senin_guvenli_parolan'))
 # Çıktıyı aşağıdaki değişkene yapıştır.
 ADMIN_PASSWORD_HASH = os.getenv(
-    "ADMIN_PASSWORD_HASH", "scrypt:32768:8:1$..."
-)  # Örnek hash
+    "ADMIN_PASSWORD_HASH",
+    "scrypt:32768:8:1$HMjGV50Sci7MC0z4$084b51c3bff50d1989b0fb30653083e179070e3545ca46c8d0c6813718cbcf06f915e642c7ebe893d74d9f9cea855c1aba8dbce6b456cc3b3b8479601eb50a3d",
+)  # Örnek hash pass 1234
 
 # --- Veritabanı Ayarları ---
 DATABASE = os.getenv("DATABASE_FILE", "database.db")

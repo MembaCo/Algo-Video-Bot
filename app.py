@@ -1,9 +1,15 @@
 # @author: MembaCo.
 
+import sys
+import os
+
+# Proje kök dizinini Python'un arama yoluna ekleyerek
+# 'database', 'services' gibi yerel modüllerin bulunmasını garantile.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import logging
 import threading
 import time
-import os
 
 from flask import (
     Flask,
@@ -17,6 +23,9 @@ from flask import (
     g,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
+
+# .env dosyasını yeniden yüklemek için eklenen import
+from dotenv import load_dotenv
 
 import config
 
@@ -43,6 +52,42 @@ if app.logger.handlers:
 app.logger = logger
 
 auto_download_manager_state = {"enabled": False, "thread": None}
+
+
+def sync_password_hash_from_env():
+    """
+    Uygulama her başladığında, .env dosyasındaki parola hash'inin
+    veritabanındaki ile aynı olmasını sağlar. Bu yöntem, olası önbellekleme
+    sorunlarını aşmak için .env dosyasını yeniden yükler.
+    """
+    logger.info(
+        "Ortam değişkenlerindeki parola hash'i veritabanı ile senkronize ediliyor..."
+    )
+    try:
+        # .env dosyasındaki en güncel değeri almak için yeniden yükle
+        load_dotenv(override=True)
+        env_hash = os.getenv("ADMIN_PASSWORD_HASH")
+
+        if not env_hash:
+            logger.error(
+                ".env dosyasında ADMIN_PASSWORD_HASH bulunamadı! Lütfen kontrol edin."
+            )
+            return
+
+        with app.app_context():
+            db = get_db()
+            # Ayar mevcutsa güncelle, değilse oluştur (UPSERT)
+            cursor = db.cursor()
+            cursor.execute(
+                "REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("ADMIN_PASSWORD_HASH", env_hash),
+            )
+            db.commit()
+        logger.info("Parola hash senkronizasyonu tamamlandı.")
+    except Exception as e:
+        logger.error(
+            f"Parola hash senkronizasyonu sırasında hata oluştu: {e}", exc_info=True
+        )
 
 
 def auto_download_manager():
@@ -137,18 +182,20 @@ def add_list():
 def settings():
     db = get_db()
     if request.method == "POST":
-        # Ayarları güncelle
+        # Diğer ayarları kaydet
         update_setting("DOWNLOADS_FOLDER", request.form["downloads_folder"], db)
         update_setting("FILENAME_TEMPLATE", request.form["filename_template"], db)
         update_setting("CONCURRENT_DOWNLOADS", request.form["concurrent_downloads"], db)
         update_setting("SPEED_LIMIT", request.form["speed_limit"], db)
 
-        # Parola değişikliği
+        # Parola değişikliği mantığı
         current_password = request.form.get("current_password")
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
 
-        if current_password or new_password or confirm_password:
+        password_fields_used = any([current_password, new_password, confirm_password])
+
+        if password_fields_used:
             password_hash = get_setting("ADMIN_PASSWORD_HASH", db)
             if not (current_password and new_password and confirm_password):
                 flash(
@@ -162,9 +209,10 @@ def settings():
                 new_hash = generate_password_hash(new_password)
                 update_setting("ADMIN_PASSWORD_HASH", new_hash, db)
                 flash("Parolanız başarıyla güncellendi.", "success")
+        else:
+            flash("Ayarlar başarıyla kaydedildi.", "success")
 
         db.commit()
-        flash("Ayarlar başarıyla kaydedildi.", "success")
         return redirect(url_for("settings"))
 
     current_settings = get_all_settings(db)
@@ -220,7 +268,6 @@ def toggle_auto_download():
 def status_api():
     if not session.get("logged_in"):
         return jsonify({"error": "Unauthorized"}), 401
-
     videos_data = services.get_all_videos_status()
     return jsonify(
         {
@@ -231,11 +278,14 @@ def status_api():
 
 
 if __name__ == "__main__":
-    # Uygulama bağlamı içinde veritabanı ve ayarları hazırla
     with app.app_context():
         setup_database()
         init_settings()
-        # İndirme klasörünün varlığını kontrol et ve gerekirse oluştur
+
+    # Parolayı .env dosyasından veritabanına senkronize et
+    sync_password_hash_from_env()
+
+    with app.app_context():
         downloads_folder = get_setting("DOWNLOADS_FOLDER")
         if not os.path.exists(downloads_folder):
             os.makedirs(downloads_folder)
