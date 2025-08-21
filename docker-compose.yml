@@ -8,26 +8,21 @@ services:
     ports:
       - 5000:5000
     volumes:
-      # CasaOS, bu yolları otomatik olarak kendi veri dizininize göre ayarlayacaktır.
-      # Örn: /DATA/AppData/algo-video-bot/downloads
+      # İndirilen videolar için klasör bağlantısı
       - type: bind
         source: /DATA/AppData/algo-video-bot/downloads
         target: /app/downloads
+      # Veritabanı ve log dosyaları gibi kalıcı veriler için klasör bağlantısı
       - type: bind
-        source: /DATA/AppData/algo-video-bot/database.db
-        target: /app/database.db
-      - type: bind
-        source: /DATA/AppData/algo-video-bot/app.log
-        target: /app/app.log
+        source: /DATA/AppData/algo-video-bot/data
+        target: /app/data
     environment:
       # CasaOS, bu alanlar için sizden değer girmenizi isteyecektir.
       - SECRET_KEY= # Buraya çok gizli ve rastgele bir anahtar yazın
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD_HASH= # Buraya ürettiğiniz parola hash'ini yapıştırın
     restart: unless-stopped
-    # Chrome'un stabil çalışması için paylaşılan bellek boyutunu artırır.
     shm_size: 2g
-    # CasaOS Arayüzü için Bilgiler
     x-casaos:
       architectures:
         - amd64
