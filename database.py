@@ -12,7 +12,7 @@ def get_db():
     if "db" not in g:
         try:
             g.db = sqlite3.connect(
-                config.DATABASE, detect_types=sqlite3.PARSE_DECLTYPES
+                config.DATABASE, detect_types=sqlite3.PARSE_DECLTYPES, timeout=20.0
             )
             g.db.row_factory = sqlite3.Row
         except sqlite3.Error as e:
@@ -29,7 +29,7 @@ def close_db(e=None):
 
 def setup_database():
     try:
-        db = sqlite3.connect(config.DATABASE)
+        db = sqlite3.connect(config.DATABASE, timeout=20.0)
         cursor = db.cursor()
         logger.info("Veritabanı tabloları kontrol ediliyor/oluşturuluyor...")
 
@@ -48,6 +48,7 @@ def setup_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
+        # ... (dosyanın geri kalanı aynı)
 
         # --- DİZİ TABLOLARI ---
         cursor.execute("""
@@ -115,10 +116,9 @@ def init_settings():
     }
 
     try:
-        db = sqlite3.connect(config.DATABASE)
+        db = sqlite3.connect(config.DATABASE, timeout=20.0)
         cursor = db.cursor()
 
-        # Eski ayarı silmek için (opsiyonel, temiz bir başlangıç için iyi)
         cursor.execute("DELETE FROM settings WHERE key = 'DOWNLOADS_FOLDER'")
 
         for key, value in defaults.items():
@@ -136,7 +136,7 @@ def init_settings():
 def get_setting(key, db_conn=None):
     close_conn = False
     if db_conn is None:
-        db_conn = sqlite3.connect(config.DATABASE)
+        db_conn = sqlite3.connect(config.DATABASE, timeout=20.0)
         close_conn = True
 
     cursor = db_conn.cursor()
@@ -149,7 +149,7 @@ def get_setting(key, db_conn=None):
 def get_all_settings(db_conn=None):
     close_conn = False
     if db_conn is None:
-        db_conn = sqlite3.connect(config.DATABASE)
+        db_conn = sqlite3.connect(config.DATABASE, timeout=20.0)
         db_conn.row_factory = sqlite3.Row
         close_conn = True
 
@@ -162,7 +162,7 @@ def get_all_settings(db_conn=None):
 def update_setting(key, value, db_conn=None):
     close_conn = False
     if db_conn is None:
-        db_conn = sqlite3.connect(config.DATABASE)
+        db_conn = sqlite3.connect(config.DATABASE, timeout=20.0)
         close_conn = True
 
     cursor = db_conn.cursor()

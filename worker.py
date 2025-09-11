@@ -182,11 +182,12 @@ def process_video(item_id, item_type):
     conn = None
     cookie_filepath = f"cookies_{item_id}_{item_type}.txt"
     try:
-        conn = sqlite3.connect(config.DATABASE)
+        # HATA DÜZELTMESİ: Veritabanı kilitleme sorununu önlemek için timeout eklendi.
+        conn = sqlite3.connect(config.DATABASE, timeout=20.0)
         conn.row_factory = sqlite3.Row
         settings = get_all_settings_from_db(conn)
 
-        # Yeni klasör ayarlarını al
+        # Klasör ayarlarını al
         movies_base_folder = settings.get("MOVIES_DOWNLOADS_FOLDER", "downloads/Movies")
         series_base_folder = settings.get("SERIES_DOWNLOADS_FOLDER", "downloads/Series")
         temp_folder = settings.get("TEMP_DOWNLOADS_FOLDER", "downloads/Temp")
