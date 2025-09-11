@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video İndirme Yöneticisi v2.1</title>
+    <title>Video İndirme Yöneticisi</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .status-sırada {
@@ -189,7 +189,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <div class="bg-gray-800 shadow-lg rounded-lg p-6">
-                <h2 class="text-xl font-semibold text-white mb-4">Disk Durumu (İndirme Klasörü)</h2>
+                <h2 class="text-xl font-semibold text-white mb-4">Disk Durumu</h2>
                 <div id="disk-status-container">
                     <div class="flex justify-between mb-1 text-sm font-medium text-gray-400">
                         <span id="disk-usage-text">Yükleniyor...</span>
@@ -339,6 +339,32 @@
                 if (arrow) arrow.classList.toggle('rotate-180', !element.classList.contains('hidden'));
             };
 
+            // --- DİZİ TAKİP ---
+            window.toggleTracking = function (seriesId, isChecked) {
+                fetch('/series/track', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        series_id: seriesId,
+                        is_tracked: isChecked,
+                    }),
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status !== 'success') {
+                            console.error('Takip durumu güncellenemedi.');
+                            // Hata durumunda checkbox'ı eski haline getir
+                            document.getElementById(`track-${seriesId}`).checked = !isChecked;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Hata:', error)
+                        document.getElementById(`track-${seriesId}`).checked = !isChecked;
+                    });
+            };
+
             // --- API & RENDERING ---
             function updateUI() {
                 const params = new URLSearchParams({
@@ -421,6 +447,12 @@
                         const newSeriesHtml = createSeriesAccordion(series);
                         ui.seriesContainer.insertAdjacentHTML('beforeend', newSeriesHtml);
                     } else {
+                        // Var olan dizi bloğunu güncelle (takip durumu değişmiş olabilir)
+                        const trackCheckbox = document.getElementById(`track-${series.id}`);
+                        if (trackCheckbox && trackCheckbox.checked !== (series.is_tracked == 1)) {
+                            trackCheckbox.checked = (series.is_tracked == 1);
+                        }
+
                         series.seasons.forEach(season => {
                             const episodeListBody = document.getElementById(`episode-list-${season.id}`);
                             if (episodeListBody) {
@@ -512,7 +544,10 @@
                                 <img src="${series.poster_url || 'https://placehold.co/100x150/1f2937/9ca3af?text=Poster+Yok'}" alt="Dizi Posteri" class="w-16 h-24 object-cover rounded shadow-lg mr-4">
                                 <div class="flex-grow">
                                     <h3 class="text-lg font-bold text-purple-400">${series.title}</h3>
-                                    <p class="text-xs text-gray-400 max-h-16 overflow-auto">${series.description}</p>
+                                     <div class="flex items-center space-x-2 mt-1" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="track-${series.id}" onchange="toggleTracking(${series.id}, this.checked)" ${series.is_tracked ? 'checked' : ''} class="form-checkbox h-4 w-4 bg-gray-600 border-gray-500 text-indigo-500 rounded focus:ring-indigo-400 focus:ring-offset-gray-800">
+                                        <label for="track-${series.id}" class="text-xs font-medium text-gray-300 cursor-pointer">Takip Et</label>
+                                    </div>
                                 </div>
                             </div>
                             <div class="flex items-center space-x-4 ml-4 mr-2">

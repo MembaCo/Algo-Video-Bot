@@ -8,6 +8,25 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def run_migrations(db):
+    """
+    Veritabanı şemasını kontrol eder ve eksik sütunlar gibi
+    gerekli güncellemeleri yapar.
+    """
+    cursor = db.cursor()
+    try:
+        # 'series' tablosunda 'is_tracked' sütununun varlığını kontrol et
+        cursor.execute("SELECT is_tracked FROM series LIMIT 1")
+    except sqlite3.OperationalError:
+        # Hata alınırsa, sütun yok demektir. O halde ekleyelim.
+        logger.info("MİGRASYON: 'series' tablosuna 'is_tracked' sütunu ekleniyor...")
+        cursor.execute(
+            "ALTER TABLE series ADD COLUMN is_tracked INTEGER NOT NULL DEFAULT 0"
+        )
+        db.commit()
+        logger.info("MİGRASYON: Sütun başarıyla eklendi.")
+
+
 def get_db():
     if "db" not in g:
         try:
@@ -48,7 +67,6 @@ def setup_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        # ... (dosyanın geri kalanı aynı)
 
         # --- DİZİ TABLOLARI ---
         cursor.execute("""
@@ -58,6 +76,7 @@ def setup_database():
             source_url TEXT NOT NULL UNIQUE,
             poster_url TEXT,
             description TEXT,
+            is_tracked INTEGER NOT NULL DEFAULT 0, -- 0: False, 1: True
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -94,6 +113,9 @@ def setup_database():
         )
         """)
 
+        # Tablolar oluşturulduktan sonra şema güncellemelerini çalıştır
+        run_migrations(db)
+
         db.commit()
         db.close()
         logger.info("Veritabanı kurulumu başarıyla tamamlandı.")
@@ -119,6 +141,7 @@ def init_settings():
         db = sqlite3.connect(config.DATABASE, timeout=20.0)
         cursor = db.cursor()
 
+        # Eski ayarı silmek için (opsiyonel, temiz bir başlangıç için iyi)
         cursor.execute("DELETE FROM settings WHERE key = 'DOWNLOADS_FOLDER'")
 
         for key, value in defaults.items():

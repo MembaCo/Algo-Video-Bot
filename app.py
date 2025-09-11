@@ -23,6 +23,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
 
 import config
 from database import (
@@ -230,6 +231,31 @@ def start_series_download(series_id):
     return redirect(url_for("index"))
 
 
+@app.route("/series/track", methods=["POST"])
+def track_series():
+    data = request.get_json()
+    series_id = data.get("series_id")
+    is_tracked = data.get("is_tracked")
+
+    if series_id is None or is_tracked is None:
+        return jsonify({"status": "error", "message": "Eksik bilgi."}), 400
+
+    db = get_db()
+    db.execute(
+        "UPDATE series SET is_tracked = ? WHERE id = ?",
+        (1 if is_tracked else 0, series_id),
+    )
+    db.commit()
+
+    series_title = db.execute(
+        "SELECT title FROM series WHERE id = ?", (series_id,)
+    ).fetchone()["title"]
+    status_text = "takibe alındı" if is_tracked else "takipten çıkarıldı"
+    logger.info(f"'{series_title}' dizisi {status_text}.")
+
+    return jsonify({"status": "success"})
+
+
 @app.route("/episode/start/<int:episode_id>", methods=["POST"])
 def start_episode_download(episode_id):
     success, message = services.start_download(episode_id, "episode", active_processes)
@@ -358,12 +384,16 @@ def status_api():
 
     disk_data = {}
     try:
-        downloads_folder = get_setting("DOWNLOADS_FOLDER")
+        # Check all relevant download folders for disk usage
+        settings = get_all_settings()
         path_to_check = (
-            downloads_folder
-            if downloads_folder and os.path.exists(downloads_folder)
-            else "."
+            settings.get("MOVIES_DOWNLOADS_FOLDER")
+            or settings.get("SERIES_DOWNLOADS_FOLDER")
+            or "."
         )
+        if not os.path.exists(path_to_check):
+            path_to_check = "."
+
         total, used, free = shutil.disk_usage(path_to_check)
         disk_data = {"total": total, "used": used, "free": free}
     except Exception as e:
@@ -387,9 +417,16 @@ if __name__ == "__main__":
         setup_database()
         init_settings()
     sync_password_hash_from_env()
-    with app.app_context():
-        downloads_folder = get_setting("DOWNLOADS_FOLDER")
-        if downloads_folder and not os.path.exists(downloads_folder):
-            os.makedirs(downloads_folder)
+
+    # Zamanlayıcıyı başlat
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(
+        services.check_and_add_new_episodes, "interval", hours=24, args=[app]
+    )
+    scheduler.start()
+    logger.info(
+        "Dizi takip zamanlayıcısı başlatıldı. Kontrol her 24 saatte bir yapılacak."
+    )
+
     logger.info("Uygulama başlatılıyor...")
     app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)

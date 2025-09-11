@@ -6,6 +6,32 @@ Format, Keep a Changelog standartlarına dayanmaktadır ve bu proje Semantic Ver
 [Unreleased]
 Henüz yayınlanmamış değişiklikler.
 
+[2.7.0] - 2025-09-11
+Eklendi (Added)
+Dizi Takip Özelliği:
+
+Kullanıcıların dizileri "Takip Et" olarak işaretlemesine olanak tanıyan bir özellik eklendi.
+
+Takip edilen diziler için günde bir kez otomatik olarak yeni bölüm kontrolü yapan bir zamanlayıcı (APScheduler) entegre edildi.
+
+Yeni bulunan bölümler otomatik olarak indirme sırasına eklenir.
+
+Otomatik Veritabanı Güncelleme (Migration): Uygulama başlatıldığında veritabanı şemasını kontrol eden ve is_tracked gibi eksik sütunları otomatik olarak ekleyen bir mekanizma (run_migrations) eklendi. Bu, gelecekteki güncellemeleri kolaylaştırır ve no such column hatalarını önler.
+
+Değiştirildi (Changed)
+Veritabanı (database.py): series tablosuna, bir dizinin takip edilip edilmediğini saklamak için is_tracked adında yeni bir sütun eklendi.
+
+Arayüz (index.html): Her dizi kartına "Takip Et" onay kutusu (checkbox) eklendi ve bu kutunun tıklama olayının akordiyon menüsünü tetiklemesi engellendi.
+
+Servisler (services.py): Takip edilen dizileri periyodik olarak kontrol edip yeni bölümleri veritabanına ekleyen check_and_add_new_episodes fonksiyonu eklendi.
+
+Ana Uygulama (app.py): Zamanlayıcıyı başlatmak ve "Takip Et" durumunu güncellemek için /series/track adında yeni bir API endpoint'i eklendi.
+
+Düzeltildi (Fixed)
+Veritabanı Hatası: Uygulama güncellendiğinde ortaya çıkan sqlite3.OperationalError: no such column: is_tracked hatası, otomatik veritabanı güncelleme mekanizması ile kalıcı olarak çözüldü.
+
+Arayüz Hatası: "Takip Et" onay kutusunun, üst katmandaki tıklama olayını tetiklediği için çalışmaması sorunu event.stopPropagation() kullanılarak düzeltildi.
+
 [2.6.0] - 2025-09-11
 Eklendi (Added)
 Gelişmiş Klasör Yönetimi:
@@ -23,36 +49,23 @@ Veritabanı (database.py): settings tablosu, tek bir DOWNLOADS_FOLDER yerine MOV
 
 Ayarlar Arayüzü (settings.html): Web arayüzü, yeni klasör yönetimi ayarlarını yansıtacak şekilde güncellendi.
 
-## [2.5.0] - 2025-09-11
+[2.5.0] - 2025-09-11
+Eklendi (Added)
+.github/workflows/docker-publish.yml dosyası ile GitHub Actions entegrasyonu eklendi. Bu sayede main branch'ine yapılan her push'ta ve her yeni sürüm yayınlandığında Docker imajı otomatik olarak derlenip GHCR'ye yüklenir.
 
-### Eklendi (Added)
+Değiştirildi (Changed)
+Mimari İyileştirme: Scraper (hdfilmcehennemi_scraper.py) ve Service (services.py) katmanları arasındaki sorumluluklar net bir şekilde ayrıldı.
 
-- `.github/workflows/docker-publish.yml` dosyası ile GitHub Actions entegrasyonu eklendi. Bu sayede `main` branch'ine yapılan her push'ta ve her yeni sürüm yayınlandığında Docker imajı otomatik olarak derlenip GHCR'ye yüklenir.
+Docker İyileştirmeleri: docker-compose.yml ve Docker volume yönetimi standartlaştırıldı.
 
-### Değiştirildi (Changed)
+README.md dosyası güncellendi.
 
-- **Mimari İyileştirme**: Scraper (`hdfilmcehennemi_scraper.py`) ve Service (`services.py`) katmanları arasındaki sorumluluklar net bir şekilde ayrıldı. Scraper artık sadece veri kazımaktan, Service katmanı ise veritabanı işlemlerinden sorumludur.
-- **Docker İyileştirmeleri**:
-  - `docker-compose.yml` dosyasındaki servis, imaj ve konteyner isimleri proje adıyla (`algo-video-bot`) tutarlı olacak şekilde standartlaştırıldı.
-  - Docker volume yönetimi iyileştirildi; `database.db` ve `app.log` gibi dosyalar artık tek bir kalıcı veri klasörü (`/app/data`) altında yönetiliyor.
-- `README.md` dosyası, yeni kurulum talimatları ve daha net açıklamalarla güncellendi.
+Düzeltildi (Fixed)
+Çeşitli SQL ve dosya yolu oluşturma hataları düzeltildi.
 
-### Düzeltildi (Fixed)
+[2.1.0] - Önceki Sürüm
+Eklendi (Added)
+Dizi desteği, sekmeli yapı, disk kullanım çubuğu ve aktif indirme paneli eklendi.
 
-- `worker.py`: `movies` tablosunda bulunmayan `source_url` sütununu güncellemeye çalışan kritik bir SQL hatası düzeltildi.
-- `hdfilmcehennemi_scraper.py` dosyasındaki `services.py`'de tekrar eden veritabanı fonksiyonları kaldırıldı.
-- `worker.py` dosyasındaki dosya yolu oluşturma mantığından gereksiz değişkenler (`episode_num`, `season_num`) temizlendi.
-
-## [2.1.0] - Önceki Sürüm
-
-### Eklendi (Added)
-
-- Dizi desteği: Dizi ana sayfa linki üzerinden tüm sezon ve bölümleri çekme ve indirme kuyruğuna ekleme özelliği.
-- Ana sayfaya sekmeli yapı (Filmler / Diziler) eklendi.
-- Disk kullanımını gösteren bir ilerleme çubuğu eklendi.
-- Aktif indirmeleri özetleyen bir panel eklendi.
-
-### Değiştirildi (Changed)
-
-- Ana sayfa kullanıcı arayüzü (`index.html`) Tailwind CSS ile tamamen yenilendi.
-- Durum güncellemeleri ve kullanıcı arayüzü etkileşimleri için JavaScript altyapısı iyileştirildi.
+Değiştirildi (Changed)
+Kullanıcı arayüzü Tailwind CSS ile yenilendi.

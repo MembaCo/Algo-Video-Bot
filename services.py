@@ -514,3 +514,99 @@ def get_active_downloads_status():
     """
     active_items = db.execute(query).fetchall()
     return [dict(item) for item in active_items]
+
+
+# --- DİZİ TAKİP SERVİSİ ---
+def check_and_add_new_episodes(app):
+    """Takip edilen dizileri kontrol eder ve yeni bölümleri sıraya ekler."""
+    with app.app_context():
+        logger.info(
+            "[SERIES TRACKER] Takip edilen diziler için yeni bölüm kontrolü başlatıldı."
+        )
+        db = get_db()
+        tracked_series = db.execute(
+            "SELECT id, title, source_url FROM series WHERE is_tracked = 1"
+        ).fetchall()
+
+        if not tracked_series:
+            logger.info(
+                "[SERIES TRACKER] Takip edilen dizi bulunmadığından kontrol sonlandırıldı."
+            )
+            return
+
+        for series in tracked_series:
+            try:
+                logger.info(
+                    f"[SERIES TRACKER] '{series['title']}' dizisi kontrol ediliyor..."
+                )
+                scraper = get_scraper_for_url(series["source_url"])
+                if not scraper:
+                    continue
+
+                # Siteden en güncel bölüm/sezon bilgisini çek
+                scraped_data = scraper.scrape_series_data(series["source_url"])
+                if not scraped_data:
+                    logger.warning(
+                        f"'{series['title']}' dizisi için veri çekilemedi, atlanıyor."
+                    )
+                    continue
+
+                new_episodes_found = 0
+                for scraped_season in scraped_data.get("seasons", []):
+                    # Veritabanında sezon var mı, yoksa oluştur
+                    season_row = db.execute(
+                        "SELECT id FROM seasons WHERE series_id = ? AND season_number = ?",
+                        (series["id"], scraped_season["season_number"]),
+                    ).fetchone()
+                    if not season_row:
+                        cursor = db.cursor()
+                        cursor.execute(
+                            "INSERT INTO seasons (series_id, season_number) VALUES (?, ?)",
+                            (series["id"], scraped_season["season_number"]),
+                        )
+                        season_id = cursor.lastrowid
+                        db.commit()
+                    else:
+                        season_id = season_row["id"]
+
+                    for scraped_episode in scraped_season.get("episodes", []):
+                        # Bölüm veritabanında var mı kontrol et
+                        episode_exists = db.execute(
+                            "SELECT id FROM episodes WHERE season_id = ? AND episode_number = ?",
+                            (season_id, scraped_episode["episode_number"]),
+                        ).fetchone()
+
+                        if not episode_exists:
+                            # YENİ BÖLÜM! Veritabanına ekle.
+                            db.execute(
+                                "INSERT INTO episodes (season_id, episode_number, title, url, status) VALUES (?, ?, ?, ?, ?)",
+                                (
+                                    season_id,
+                                    scraped_episode["episode_number"],
+                                    scraped_episode["title"],
+                                    scraped_episode["url"],
+                                    "Sırada",
+                                ),
+                            )
+                            db.commit()
+                            new_episodes_found += 1
+                            logger.info(
+                                f"[SERIES TRACKER] YENİ BÖLÜM BULUNDU: '{series['title']}' - S{scraped_season['season_number']:02d}E{scraped_episode['episode_number']:02d}"
+                            )
+
+                if new_episodes_found > 0:
+                    logger.info(
+                        f"[SERIES TRACKER] '{series['title']}' dizisi için toplam {new_episodes_found} yeni bölüm eklendi."
+                    )
+                else:
+                    logger.info(
+                        f"[SERIES TRACKER] '{series['title']}' dizisi için yeni bölüm bulunamadı."
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"'{series['title']}' dizisi kontrol edilirken hata oluştu: {e}",
+                    exc_info=True,
+                )
+
+        logger.info("[SERIES TRACKER] Yeni bölüm kontrolü tamamlandı.")
