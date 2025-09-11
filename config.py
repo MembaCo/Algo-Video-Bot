@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # .env dosyasındaki değişkenleri yükle
 load_dotenv()
 
-VERSION = "v2.5.0 Beta Sürüm"
+VERSION = "v2.6.0 Beta Sürüm"
 
 # --- Veri Klasörü Tanımı ---
 # Kalıcı verilerin (veritabanı, loglar vb.) saklanacağı klasör.

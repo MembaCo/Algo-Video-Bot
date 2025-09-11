@@ -45,93 +45,143 @@
             <div class="bg-gray-800 shadow-lg rounded-lg p-6">
                 <h2 class="text-xl font-semibold text-white border-b border-gray-700 pb-3 mb-6">İndirme Ayarları</h2>
                 <div class="space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="downloads_folder" class="block text-sm font-medium text-gray-300 md:mt-2">İndirme
-                            Klasörü</label>
-                        <div class="md:col-span-2">
-                            <input type="text" name="downloads_folder" id="downloads_folder"
-                                value="{{ settings.DOWNLOADS_FOLDER }}"
-                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Videoların kaydedileceği ana klasör.</p>
+                    <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                        <h2 class="text-xl font-semibold text-white border-b border-gray-700 pb-3 mb-6">İndirme Ayarları
+                        </h2>
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="movies_downloads_folder"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Film İndirme Klasörü</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="movies_downloads_folder" id="movies_downloads_folder"
+                                        value="{{ settings.MOVIES_DOWNLOADS_FOLDER }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Filmlerin kaydedileceği ana klasör.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="series_downloads_folder"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Dizi İndirme Klasörü</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="series_downloads_folder" id="series_downloads_folder"
+                                        value="{{ settings.SERIES_DOWNLOADS_FOLDER }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Dizilerin kaydedileceği ana klasör.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="temp_downloads_folder"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Geçici İndirme
+                                    Klasörü</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="temp_downloads_folder" id="temp_downloads_folder"
+                                        value="{{ settings.TEMP_DOWNLOADS_FOLDER }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">İndirmeler tamamlanana kadar dosyaların
+                                        tutulacağı klasör.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="filename_template"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Film
+                                    Dosya Adı Şablonu</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="filename_template" id="filename_template"
+                                        value="{{ settings.FILENAME_TEMPLATE }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Değişkenler: <code>{title}</code>,
+                                        <code>{year}</code>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="filename_template"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Film
+                                    Dosya Adı Şablonu</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="filename_template" id="filename_template"
+                                        value="{{ settings.FILENAME_TEMPLATE }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Değişkenler: <code>{title}</code>,
+                                        <code>{year}</code>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="series_filename_template"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Dizi Dosya Yolu
+                                    Şablonu</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="series_filename_template" id="series_filename_template"
+                                        value="{{ settings.SERIES_FILENAME_TEMPLATE }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Klasör oluşturmak için <code>/</code>
+                                        kullanın.
+                                        Değişkenler: <code>{series_title}</code>, <code>{season_number}</code>,
+                                        <code>{episode_number}</code>, <code>{episode_title}</code>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="concurrent_downloads"
+                                    class="block text-sm font-medium text-gray-300 md:mt-2">Eşzamanlı İndirme</label>
+                                <div class="md:col-span-2">
+                                    <input type="number" name="concurrent_downloads" id="concurrent_downloads"
+                                        value="{{ settings.CONCURRENT_DOWNLOADS }}" min="1" max="5"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Aynı anda indirilecek maksimum dosya sayısı.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                                <label for="speed_limit" class="block text-sm font-medium text-gray-300 md:mt-2">Hız
+                                    Limiti</label>
+                                <div class="md:col-span-2">
+                                    <input type="text" name="speed_limit" id="speed_limit"
+                                        value="{{ settings.SPEED_LIMIT }}"
+                                        class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                                    <p class="mt-2 text-xs text-gray-400">Boş bırakırsanız limit olmaz. Örnekler:
+                                        <code>500K</code>, <code>2.5M</code>
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="filename_template" class="block text-sm font-medium text-gray-300 md:mt-2">Film
-                            Dosya Adı Şablonu</label>
-                        <div class="md:col-span-2">
-                            <input type="text" name="filename_template" id="filename_template"
-                                value="{{ settings.FILENAME_TEMPLATE }}"
-                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Değişkenler: <code>{title}</code>, <code>{year}</code>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="series_filename_template"
-                            class="block text-sm font-medium text-gray-300 md:mt-2">Dizi Dosya Yolu Şablonu</label>
-                        <div class="md:col-span-2">
-                            <input type="text" name="series_filename_template" id="series_filename_template"
-                                value="{{ settings.SERIES_FILENAME_TEMPLATE }}"
-                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Klasör oluşturmak için <code>/</code> kullanın.
-                                Değişkenler: <code>{series_title}</code>, <code>{season_number}</code>,
-                                <code>{episode_number}</code>, <code>{episode_title}</code></p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="concurrent_downloads"
-                            class="block text-sm font-medium text-gray-300 md:mt-2">Eşzamanlı İndirme</label>
-                        <div class="md:col-span-2">
-                            <input type="number" name="concurrent_downloads" id="concurrent_downloads"
-                                value="{{ settings.CONCURRENT_DOWNLOADS }}" min="1" max="5"
-                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Aynı anda indirilecek maksimum dosya sayısı.</p>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                        <label for="speed_limit" class="block text-sm font-medium text-gray-300 md:mt-2">Hız
-                            Limiti</label>
-                        <div class="md:col-span-2">
-                            <input type="text" name="speed_limit" id="speed_limit" value="{{ settings.SPEED_LIMIT }}"
-                                class="block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                            <p class="mt-2 text-xs text-gray-400">Boş bırakırsanız limit olmaz. Örnekler:
-                                <code>500K</code>, <code>2.5M</code></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Güvenlik Ayarları -->
-            <div class="bg-gray-800 shadow-lg rounded-lg p-6">
-                <h2 class="text-xl font-semibold text-white border-b border-gray-700 pb-3 mb-6">Yönetici Parolasını
-                    Değiştir</h2>
-                <div class="space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                        <label for="current_password" class="block text-sm font-medium text-gray-300">Mevcut
-                            Parola</label>
-                        <input type="password" name="current_password" id="current_password"
-                            class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                    <!-- Güvenlik Ayarları -->
+                    <div class="bg-gray-800 shadow-lg rounded-lg p-6">
+                        <h2 class="text-xl font-semibold text-white border-b border-gray-700 pb-3 mb-6">Yönetici
+                            Parolasını
+                            Değiştir</h2>
+                        <div class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                <label for="current_password" class="block text-sm font-medium text-gray-300">Mevcut
+                                    Parola</label>
+                                <input type="password" name="current_password" id="current_password"
+                                    class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                <label for="new_password" class="block text-sm font-medium text-gray-300">Yeni
+                                    Parola</label>
+                                <input type="password" name="new_password" id="new_password"
+                                    class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                <label for="confirm_password" class="block text-sm font-medium text-gray-300">Yeni
+                                    Parola
+                                    (Tekrar)</label>
+                                <input type="password" name="confirm_password" id="confirm_password"
+                                    class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
+                            </div>
+                        </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                        <label for="new_password" class="block text-sm font-medium text-gray-300">Yeni Parola</label>
-                        <input type="password" name="new_password" id="new_password"
-                            class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                        <label for="confirm_password" class="block text-sm font-medium text-gray-300">Yeni Parola
-                            (Tekrar)</label>
-                        <input type="password" name="confirm_password" id="confirm_password"
-                            class="md:col-span-2 block w-full shadow-sm sm:text-sm bg-gray-700 border-gray-600 text-white rounded-md">
-                    </div>
-                </div>
-            </div>
 
-            <div class="flex justify-end">
-                <button type="submit"
-                    class="inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                    Ayarları Kaydet
-                </button>
-            </div>
+                    <div class="flex justify-end">
+                        <button type="submit"
+                            class="inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                            Ayarları Kaydet
+                        </button>
+                    </div>
         </form>
     </main>
 </body>

@@ -8,12 +8,33 @@ import sys
 from multiprocessing import Process
 import math
 from urllib.parse import urlparse
+import glob
 
-from database import get_db, get_setting
-from worker import process_video
+from database import get_db, get_setting, get_all_settings
+from worker import process_video, to_ascii_safe
 from scrapers import get_scraper_for_url
 
 logger = logging.getLogger(__name__)
+
+
+def check_existing_file(base_filepath):
+    """
+    Verilen dosya yolunu (uzantısız) alarak, yaygın video uzantılarıyla eşleşen
+    bir dosyanın olup olmadığını kontrol eder. Varsa, dosyanın tam yolunu döndürür.
+    """
+    # Yaygın video formatlarını arayacak glob deseni
+    search_pattern = f"{base_filepath}.*"
+    files_found = glob.glob(search_pattern)
+
+    for filepath in files_found:
+        # Dosya uzantısını al ve küçük harfe çevir
+        extension = os.path.splitext(filepath)[1].lower()
+        # Yaygın video uzantılarından biriyle eşleşiyorsa
+        if extension in [".mkv", ".mp4", ".avi", ".mov", ".webm", ".flv"]:
+            logger.info(f"Mevcut indirilmiş dosya bulundu: {filepath}")
+            return filepath  # Eşleşen ilk dosyanın tam yolunu döndür
+
+    return None
 
 
 # --- FİLM İŞLEMLERİ ---
@@ -21,14 +42,33 @@ def add_movie_to_queue(url, scraper):
     db = get_db()
     if db.execute("SELECT id FROM movies WHERE url = ?", (url,)).fetchone():
         return False, "Bu film zaten kuyrukta mevcut."
+
     metadata = scraper.scrape_movie_metadata(url)
     if not metadata:
         return False, "Film bilgileri çekilemedi."
+
+    settings = get_all_settings(db)
+    movies_folder = settings.get("MOVIES_DOWNLOADS_FOLDER", "downloads/Movies")
+    filename_template = settings.get("FILENAME_TEMPLATE", "{title} - {year}")
+
+    # Potansiyel dosya adını oluştur
+    filename_base = filename_template.format(
+        title=metadata["title"] or "Bilinmeyen", year=metadata["year"] or "YYYY"
+    )
+    safe_filename_base = to_ascii_safe(filename_base)
+    full_path_base = os.path.join(movies_folder, safe_filename_base)
+
+    # Diskte dosyayı kontrol et
+    existing_filepath = check_existing_file(full_path_base)
+
+    status = "Tamamlandı" if existing_filepath else "Sırada"
+    progress = 100.0 if existing_filepath else 0.0
+
     db.execute(
-        "INSERT INTO movies (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO movies (url, status, title, year, genre, description, imdb_score, director, cast, poster_url, source_site, filepath, progress) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             url,
-            "Sırada",
+            status,
             metadata["title"],
             metadata["year"],
             metadata["genre"],
@@ -38,10 +78,19 @@ def add_movie_to_queue(url, scraper):
             metadata["cast"],
             metadata["poster_url"],
             urlparse(url).netloc.replace("www.", ""),
+            existing_filepath,
+            progress,
         ),
     )
     db.commit()
-    return True, f'"{metadata["title"]}" başarıyla sıraya eklendi.'
+
+    if existing_filepath:
+        return (
+            True,
+            f'"{metadata["title"]}" zaten indirilmiş olarak bulundu ve listeye eklendi.',
+        )
+    else:
+        return True, f'"{metadata["title"]}" başarıyla sıraya eklendi.'
 
 
 def add_movies_from_list_page_async(app, list_url):
@@ -86,6 +135,13 @@ def add_series_to_queue(series_url, scraper):
             "Dizi bilgileri çekilemedi. Linki kontrol edin veya site yapısı değişmiş olabilir.",
         )
 
+    settings = get_all_settings(db)
+    series_folder = settings.get("SERIES_DOWNLOADS_FOLDER", "downloads/Series")
+    template = settings.get(
+        "SERIES_FILENAME_TEMPLATE",
+        "{series_title}/S{season_number:02d}E{episode_number:02d} - {episode_title}",
+    )
+
     cursor = db.cursor()
     cursor.execute(
         "SELECT id FROM series WHERE source_url = ?", (series_data["source_url"],)
@@ -107,6 +163,7 @@ def add_series_to_queue(series_url, scraper):
         series_id = series_row["id"]
 
     added_count = 0
+    skipped_count = 0
     for season in series_data["seasons"]:
         cursor.execute(
             "SELECT id FROM seasons WHERE series_id = ? AND season_number = ?",
@@ -123,22 +180,45 @@ def add_series_to_queue(series_url, scraper):
             season_id = season_row["id"]
 
         for episode in season["episodes"]:
+            # Potansiyel dosya yolunu oluştur
+            relative_path_str = template.format(
+                series_title=series_data["title"],
+                season_number=season["season_number"],
+                episode_number=episode["episode_number"],
+                episode_title=episode["title"] or "",
+            )
+            safe_relative_path = os.path.join(
+                *[to_ascii_safe(p) for p in relative_path_str.split("/")]
+            )
+            full_path_base = os.path.join(series_folder, safe_relative_path)
+
+            # Diskte dosyayı kontrol et
+            existing_filepath = check_existing_file(full_path_base)
+
+            status = "Tamamlandı" if existing_filepath else "Sırada"
+            progress = 100.0 if existing_filepath else 0.0
+
             res = cursor.execute(
-                "INSERT OR IGNORE INTO episodes (season_id, episode_number, title, url) VALUES (?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO episodes (season_id, episode_number, title, url, status, filepath, progress) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     season_id,
                     episode["episode_number"],
                     episode["title"],
                     episode["url"],
+                    status,
+                    existing_filepath,
+                    progress,
                 ),
             )
             if res.rowcount > 0:
-                added_count += 1
+                if existing_filepath:
+                    skipped_count += 1
+                else:
+                    added_count += 1
     db.commit()
-    return (
-        True,
-        f'"{series_data["title"]}" dizisi için {added_count} yeni bölüm sıraya eklendi.',
-    )
+
+    message = f'"{series_data["title"]}" dizisi için işlem tamamlandı. Yeni eklenen: {added_count}, zaten mevcut olan: {skipped_count}.'
+    return True, message
 
 
 def add_series_to_queue_async(app, series_url):
@@ -338,13 +418,15 @@ def run_auto_download_cycle(active_processes):
                 f"Otomatik yönetici: Tamamlanmış proses (PID: {pid}) temizlendi."
             )
     while len(active_processes) < concurrent_limit:
-        next_item = db.execute("""
+        next_item = db.execute(
+            """
             SELECT id, 'movie' as type, created_at FROM movies WHERE status = 'Sırada'
             UNION ALL
             SELECT id, 'episode' as type, created_at FROM episodes WHERE status = 'Sırada'
             ORDER BY created_at ASC
             LIMIT 1
-        """).fetchone()
+        """
+        ).fetchone()
         if not next_item:
             break
         item_id = next_item["id"]

@@ -104,7 +104,9 @@ def setup_database():
 def init_settings():
     """Varsayılan ayarları veritabanına yazar (eğer mevcut değillerse)."""
     defaults = {
-        "DOWNLOADS_FOLDER": "downloads",
+        "MOVIES_DOWNLOADS_FOLDER": "downloads/Movies",
+        "SERIES_DOWNLOADS_FOLDER": "downloads/Series",
+        "TEMP_DOWNLOADS_FOLDER": "downloads/Temp",
         "FILENAME_TEMPLATE": "{title} - {year}",
         "SERIES_FILENAME_TEMPLATE": "{series_title}/Season {season_number:02d}/{series_title} - S{season_number:02d}E{episode_number:02d} - {episode_title}",
         "CONCURRENT_DOWNLOADS": "1",
@@ -115,6 +117,10 @@ def init_settings():
     try:
         db = sqlite3.connect(config.DATABASE)
         cursor = db.cursor()
+
+        # Eski ayarı silmek için (opsiyonel, temiz bir başlangıç için iyi)
+        cursor.execute("DELETE FROM settings WHERE key = 'DOWNLOADS_FOLDER'")
+
         for key, value in defaults.items():
             cursor.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",

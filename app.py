@@ -263,7 +263,15 @@ def settings():
     db = get_db()
     if request.method == "POST":
         settings_updated = False
-        update_setting("DOWNLOADS_FOLDER", request.form["downloads_folder"], db)
+        update_setting(
+            "MOVIES_DOWNLOADS_FOLDER", request.form["movies_downloads_folder"], db
+        )
+        update_setting(
+            "SERIES_DOWNLOADS_FOLDER", request.form["series_downloads_folder"], db
+        )
+        update_setting(
+            "TEMP_DOWNLOADS_FOLDER", request.form["temp_downloads_folder"], db
+        )
         update_setting("FILENAME_TEMPLATE", request.form["filename_template"], db)
         update_setting(
             "SERIES_FILENAME_TEMPLATE", request.form["series_filename_template"], db

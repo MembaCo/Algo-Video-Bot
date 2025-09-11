@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import glob
+import shutil
 from seleniumwire import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -184,9 +185,20 @@ def process_video(item_id, item_type):
         conn = sqlite3.connect(config.DATABASE)
         conn.row_factory = sqlite3.Row
         settings = get_all_settings_from_db(conn)
-        base_download_folder = settings.get("DOWNLOADS_FOLDER", "downloads")
+
+        # Yeni klasör ayarlarını al
+        movies_base_folder = settings.get("MOVIES_DOWNLOADS_FOLDER", "downloads/Movies")
+        series_base_folder = settings.get("SERIES_DOWNLOADS_FOLDER", "downloads/Series")
+        temp_folder = settings.get("TEMP_DOWNLOADS_FOLDER", "downloads/Temp")
+
+        # Gerekli klasörlerin var olduğundan emin ol
+        os.makedirs(movies_base_folder, exist_ok=True)
+        os.makedirs(series_base_folder, exist_ok=True)
+        os.makedirs(temp_folder, exist_ok=True)
+
         url_to_fetch = None
-        output_template = None
+        temp_output_template = None
+        final_folder = None
 
         if item_type == "movie":
             item = conn.execute(
@@ -199,9 +211,9 @@ def process_video(item_id, item_type):
             filename_base = filename_template.format(
                 title=item["title"] or "Bilinmeyen", year=item["year"] or "YYYY"
             )
-            output_template = os.path.join(
-                base_download_folder, to_ascii_safe(filename_base)
-            )
+            safe_filename = to_ascii_safe(filename_base)
+            temp_output_template = os.path.join(temp_folder, safe_filename)
+            final_folder = movies_base_folder
 
         elif item_type == "episode":
             item = conn.execute(
@@ -217,23 +229,28 @@ def process_video(item_id, item_type):
             if not item:
                 return
             url_to_fetch = item["url"]
-            filename_template = settings.get(
+            template = settings.get(
                 "SERIES_FILENAME_TEMPLATE",
                 "{series_title}/S{season_number:02d}E{episode_number:02d} - {episode_title}",
             )
-            path_string = filename_template.format(
-                series_title=to_ascii_safe(item["series_title"]),
+
+            relative_path_str = template.format(
+                series_title=item["series_title"],
                 season_number=item["season_number"],
                 episode_number=item["episode_number"],
-                episode_title=to_ascii_safe(item["title"] or ""),
+                episode_title=item["title"] or "",
             )
-            final_path = os.path.join(base_download_folder, *path_string.split("/"))
-            final_dir = os.path.dirname(final_path)
-            safe_filename = os.path.basename(final_path)
-            os.makedirs(final_dir, exist_ok=True)
-            output_template = os.path.join(final_dir, safe_filename)
+            safe_relative_path = os.path.join(
+                *[to_ascii_safe(p) for p in relative_path_str.split("/")]
+            )
 
-        if not url_to_fetch or not output_template:
+            filename_base = os.path.basename(safe_relative_path)
+            temp_output_template = os.path.join(temp_folder, filename_base)
+            final_folder = os.path.join(
+                series_base_folder, os.path.dirname(safe_relative_path)
+            )
+
+        if not url_to_fetch or not temp_output_template or not final_folder:
             raise ValueError("URL veya çıktı şablonu oluşturulamadı.")
 
         _update_status_worker(conn, item_id, item_type, status="Kaynak aranıyor...")
@@ -257,13 +274,24 @@ def process_video(item_id, item_type):
                 manifest_url,
                 headers,
                 cookie_filepath,
-                output_template,
+                temp_output_template,
                 settings.get("SPEED_LIMIT"),
             )
             if success:
-                files = glob.glob(f"{output_template}.*")
+                # İndirilen dosyayı geçici klasörde bul (uzantısıyla birlikte)
+                files = glob.glob(f"{temp_output_template}.*")
                 if files:
-                    final_filepath = files[0]
+                    temp_filepath = files[0]
+                    downloaded_filename = os.path.basename(temp_filepath)
+
+                    # Hedef klasörün var olduğundan emin ol
+                    os.makedirs(final_folder, exist_ok=True)
+                    final_filepath = os.path.join(final_folder, downloaded_filename)
+
+                    # Dosyayı taşı
+                    shutil.move(temp_filepath, final_filepath)
+                    logger.info(f"Dosya şuraya taşındı: {final_filepath}")
+
                     _update_status_worker(
                         conn,
                         item_id,
@@ -273,14 +301,14 @@ def process_video(item_id, item_type):
                         filepath=final_filepath,
                     )
                     logger.info(
-                        f"ID {item_id} ({item_type}): İndirme başarıyla tamamlandı. Dosya: {final_filepath}"
+                        f"ID {item_id} ({item_type}): İndirme tamamlandı. Dosya: {final_filepath}"
                     )
                 else:
                     _update_status_worker(
                         conn,
                         item_id,
                         item_type,
-                        status="Hata: İndirilen dosya bulunamadı",
+                        status="Hata: Taşınacak dosya bulunamadı",
                     )
             else:
                 _update_status_worker(conn, item_id, item_type, status=message)
