@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _update_status_worker(
-    conn, item_id, item_type, status=None, source_url=None, progress=None, filepath=None
+    conn, item_id, item_type, status=None, progress=None, filepath=None
 ):
     """Mevcut bir veritabanı bağlantısını kullanarak durumu günceller."""
     table = "movies" if item_type == "movie" else "episodes"
@@ -33,13 +33,6 @@ def _update_status_worker(
             cursor.execute(
                 f"UPDATE {table} SET status = ? WHERE id = ?", (status, item_id)
             )
-        if source_url:
-            # Filmlerin source_url sütunu yok, bu yüzden kontrol ekliyoruz
-            if table == "movies":
-                cursor.execute(
-                    f"UPDATE {table} SET source_url = ? WHERE id = ?",
-                    (source_url, item_id),
-                )
         if progress is not None:
             cursor.execute(
                 f"UPDATE {table} SET progress = ? WHERE id = ?", (progress, item_id)
@@ -67,6 +60,7 @@ def find_manifest_url(target_url):
     options.add_argument(f"user-agent={config.USER_AGENT}")
     driver = None
     try:
+        # Dockerfile'da path'e eklendiği için Service() yeterlidir.
         service = Service()
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 30)
@@ -176,9 +170,7 @@ def to_ascii_safe(text):
         .replace("ç", "c")
         .replace("Ç", "C")
     )
-    # Dosya sistemleri için tehlikeli olabilecek karakterleri temizle
     text = re.sub(r'[<>:"/\\|?*]', "_", text).strip()
-    # Sadece ASCII karakterleri bırak (isteğe bağlı, daha geniş karakter setleri için kaldırılabilir)
     text = re.sub(r"[^\x00-\x7F]+", "", text)
     return text
 
@@ -193,7 +185,6 @@ def process_video(item_id, item_type):
         conn.row_factory = sqlite3.Row
         settings = get_all_settings_from_db(conn)
         base_download_folder = settings.get("DOWNLOADS_FOLDER", "downloads")
-
         url_to_fetch = None
         output_template = None
 
@@ -230,23 +221,15 @@ def process_video(item_id, item_type):
                 "SERIES_FILENAME_TEMPLATE",
                 "{series_title}/S{season_number:02d}E{episode_number:02d} - {episode_title}",
             )
-
-            # Şablonu doldururken tüm bileşenlerin güvenli olduğundan emin ol
             path_string = filename_template.format(
                 series_title=to_ascii_safe(item["series_title"]),
                 season_number=item["season_number"],
-                season_num=item["season_number"],
                 episode_number=item["episode_number"],
-                episode_num=item["episode_number"],  # <-- BU SATIRI EKLEDİK
                 episode_title=to_ascii_safe(item["title"] or ""),
             )
-            # İşletim sistemine uygun yola dönüştür
             final_path = os.path.join(base_download_folder, *path_string.split("/"))
-
-            # Dosya adını ve dizin yolunu ayır
             final_dir = os.path.dirname(final_path)
             safe_filename = os.path.basename(final_path)
-
             os.makedirs(final_dir, exist_ok=True)
             output_template = os.path.join(final_dir, safe_filename)
 
@@ -267,7 +250,6 @@ def process_video(item_id, item_type):
                     )
 
             _update_status_worker(conn, item_id, item_type, status="İndiriliyor")
-
             success, message = download_with_yt_dlp(
                 conn,
                 item_id,
@@ -278,7 +260,6 @@ def process_video(item_id, item_type):
                 output_template,
                 settings.get("SPEED_LIMIT"),
             )
-
             if success:
                 files = glob.glob(f"{output_template}.*")
                 if files:

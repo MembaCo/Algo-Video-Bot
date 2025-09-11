@@ -113,7 +113,6 @@ def add_series_to_queue(series_url, scraper):
             (series_id, season["season_number"]),
         )
         season_row = cursor.fetchone()
-
         if not season_row:
             cursor.execute(
                 "INSERT INTO seasons (series_id, season_number) VALUES (?, ?)",
@@ -135,7 +134,6 @@ def add_series_to_queue(series_url, scraper):
             )
             if res.rowcount > 0:
                 added_count += 1
-
     db.commit()
     return (
         True,
@@ -160,7 +158,6 @@ def add_series_to_queue_async(app, series_url):
 def start_download(item_id, item_type, active_processes):
     db = get_db()
     table = "movies" if item_type == "movie" else "episodes"
-
     item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return False, "Kayıt bulunamadı."
@@ -230,9 +227,7 @@ def delete_record(item_id, item_type, active_processes):
 
 
 def delete_series_record(series_id, active_processes):
-    """Bir diziyi, tüm sezonlarını ve bölümlerini veritabanından siler."""
     db = get_db()
-
     episodes_to_delete = db.execute(
         """
         SELECT e.id, e.pid FROM episodes e
@@ -241,14 +236,12 @@ def delete_series_record(series_id, active_processes):
     """,
         (series_id,),
     ).fetchall()
-
     for episode in episodes_to_delete:
         if episode["pid"]:
             pid = episode["pid"]
             stop_download(episode["id"], "episode")
             if pid in active_processes:
                 del active_processes[pid]
-
     series = db.execute(
         "SELECT title FROM series WHERE id = ?", (series_id,)
     ).fetchone()
@@ -263,9 +256,7 @@ def delete_series_record(series_id, active_processes):
 
 
 def start_all_episodes_for_series(series_id):
-    """Bir diziye ait indirilebilir durumdaki tüm bölümleri 'Sırada' olarak işaretler."""
     db = get_db()
-
     episodes_to_queue = db.execute(
         """
         SELECT e.id FROM episodes e
@@ -274,36 +265,28 @@ def start_all_episodes_for_series(series_id):
     """,
         (series_id,),
     ).fetchall()
-
     if not episodes_to_queue:
         return False, "Sıraya eklenecek yeni bölüm bulunamadı."
-
     count = 0
     for episode in episodes_to_queue:
         db.execute(
             "UPDATE episodes SET status = 'Sırada' WHERE id = ?", (episode["id"],)
         )
         count += 1
-
     db.commit()
-
     series_title = db.execute(
         "SELECT title FROM series WHERE id = ?", (series_id,)
     ).fetchone()["title"]
-
     logger.info(f"'{series_title}' dizisi için {count} bölüm indirme sırasına alındı.")
     return True, f"'{series_title}' dizisi için {count} bölüm indirme sırasına alındı."
 
 
 def delete_item_file(item_id, item_type):
-    """Bir film veya bölüm dosyasını diskten siler."""
     db = get_db()
     table = "movies" if item_type == "movie" else "episodes"
-
     item = db.execute(f"SELECT * FROM {table} WHERE id = ?", (item_id,)).fetchone()
     if not item:
         return False, "Kayıt bulunamadı."
-
     filepath = item["filepath"]
     if filepath and os.path.exists(filepath):
         try:
@@ -322,23 +305,18 @@ def delete_item_file(item_id, item_type):
 
 
 def retry_all_failed():
-    """Hata durumundaki veya duraklatılmış tüm film ve bölümleri tekrar sıraya alır."""
     db = get_db()
     cursor = db.cursor()
-
     cursor.execute(
         "UPDATE movies SET status = 'Sırada', pid = NULL WHERE status LIKE 'Hata:%' OR status = 'Duraklatıldı'"
     )
     movies_updated = cursor.rowcount
-
     cursor.execute(
         "UPDATE episodes SET status = 'Sırada', pid = NULL WHERE status LIKE 'Hata:%' OR status = 'Duraklatıldı'"
     )
     episodes_updated = cursor.rowcount
-
     db.commit()
     total_updated = movies_updated + episodes_updated
-
     if total_updated > 0:
         logger.info(f"{total_updated} adet sorunlu indirme tekrar sıraya alındı.")
         return True, f"{total_updated} adet sorunlu indirme tekrar sıraya alındı."
@@ -348,20 +326,17 @@ def retry_all_failed():
 
 # --- OTOMATİK İNDİRME YÖNETİCİSİ ---
 def run_auto_download_cycle(active_processes):
-    """Sıradaki filmleri ve bölümleri otomatik olarak indirmeye başlar."""
     db = get_db()
     try:
         concurrent_limit = int(get_setting("CONCURRENT_DOWNLOADS", db))
     except (ValueError, TypeError):
         concurrent_limit = 1
-
     for pid, process in list(active_processes.items()):
         if not process.is_alive():
             del active_processes[pid]
             logger.info(
                 f"Otomatik yönetici: Tamamlanmış proses (PID: {pid}) temizlendi."
             )
-
     while len(active_processes) < concurrent_limit:
         next_item = db.execute("""
             SELECT id, 'movie' as type, created_at FROM movies WHERE status = 'Sırada'
@@ -370,10 +345,8 @@ def run_auto_download_cycle(active_processes):
             ORDER BY created_at ASC
             LIMIT 1
         """).fetchone()
-
         if not next_item:
             break
-
         item_id = next_item["id"]
         item_type = next_item["type"]
         logger.info(
@@ -385,62 +358,47 @@ def run_auto_download_cycle(active_processes):
 # --- API İÇİN VERİ ÇEKME FONKSİYONLARI ---
 def get_all_movies_status(hide_completed=False, page=1, per_page=10):
     db = get_db()
-
     base_query = "FROM movies "
     count_query = "SELECT COUNT(id) "
     data_query = "SELECT * "
-
     params = {}
     where_clauses = []
-
     if hide_completed:
         where_clauses.append("status != :status")
         params["status"] = "Tamamlandı"
-
     if where_clauses:
         base_query += "WHERE " + " AND ".join(where_clauses)
-
     total_items = db.execute(count_query + base_query, params).fetchone()[0]
     total_pages = math.ceil(total_items / per_page)
     offset = (page - 1) * per_page
-
     final_query = (
         data_query
         + base_query
         + """
-        ORDER BY
-            CASE
-                WHEN status = 'İndiriliyor' THEN 1
-                WHEN status = 'Kaynak aranıyor...' THEN 2
-                WHEN status = 'Sırada' THEN 3
-                WHEN status LIKE 'Hata:%' THEN 4
-                WHEN status = 'Duraklatıldı' THEN 5
-                WHEN status = 'Tamamlandı' THEN 6
-                ELSE 7
-            END,
-            created_at DESC
+        ORDER BY CASE
+            WHEN status = 'İndiriliyor' THEN 1 WHEN status = 'Kaynak aranıyor...' THEN 2
+            WHEN status = 'Sırada' THEN 3 WHEN status LIKE 'Hata:%' THEN 4
+            WHEN status = 'Duraklatıldı' THEN 5 WHEN status = 'Tamamlandı' THEN 6
+            ELSE 7
+        END, created_at DESC
         LIMIT :limit OFFSET :offset
-        """
+    """
     )
     params["limit"] = per_page
     params["offset"] = offset
-
     movies = db.execute(final_query, params).fetchall()
-
     pagination_data = {
         "page": page,
         "per_page": per_page,
         "total_items": total_items,
         "total_pages": total_pages,
     }
-
     return {m["id"]: dict(m) for m in movies}, pagination_data
 
 
 def get_all_series_status():
     db = get_db()
     series_list = db.execute("SELECT * FROM series ORDER BY title ASC").fetchall()
-
     series_data = []
     for s in series_list:
         series_dict = dict(s)
@@ -448,7 +406,6 @@ def get_all_series_status():
             "SELECT * FROM seasons WHERE series_id = ? ORDER BY season_number ASC",
             (s["id"],),
         ).fetchall()
-
         series_dict["seasons"] = []
         for season in seasons:
             season_dict = dict(season)
@@ -459,12 +416,10 @@ def get_all_series_status():
             season_dict["episodes"] = [dict(ep) for ep in episodes]
             series_dict["seasons"].append(season_dict)
         series_data.append(series_dict)
-
     return series_data
 
 
 def get_active_downloads_status():
-    """'İndiriliyor' veya 'Kaynak aranıyor...' durumundaki tüm film ve bölümleri döndürür."""
     db = get_db()
     query = """
         SELECT id, title, progress, 'Film' as type FROM movies WHERE status IN ('İndiriliyor', 'Kaynak aranıyor...')

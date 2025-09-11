@@ -1,39 +1,43 @@
 # @author: MembaCo.
-# CasaOS için test amaçlı :main etiketi ile güncellenmiş Docker Compose dosyası.
+# Proje ile tutarlı hale getirilmiş ve volume yönetimi iyileştirilmiş Docker Compose dosyası.
 
 services:
-  algo-video-downloader:
-    # İmaj etiketini :latest yerine :main olarak deniyoruz
-    image: ghcr.io/membaco/algo-video-downloader:main
-    container_name: algo-video-downloader
+  algo-video-bot:
+    image: ghcr.io/membaco/algo-video-bot:latest
+    container_name: algo-video-bot
     ports:
       - 5000:5000
     volumes:
       - type: bind
-        source: /DATA/AppData/algo-video-downloader/downloads
+        # Bu yolu kendi sunucu/CasaOS yapınıza göre düzenlemeniz gerekebilir.
+        source: /DATA/AppData/algo-video-bot/downloads
         target: /app/downloads
       - type: bind
-        source: /DATA/AppData/algo-video-downloader/data
+        # Veritabanı, loglar ve ayarların tutulduğu ana veri klasörü
+        source: /DATA/AppData/algo-video-bot/data
         target: /app/data
     environment:
       - SECRET_KEY= # Buraya çok gizli ve rastgele bir anahtar yazın
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD_HASH= # Buraya ürettiğiniz parola hash'ini yapıştırın
+      # DATA_DIR ortam değişkeni, verilerin konteyner içinde nereye yazılacağını belirtir.
+      # Volume hedefi (/app/data) ile aynı olmalıdır.
+      - DATA_DIR=/app/data
     restart: unless-stopped
     shm_size: 2g
     x-casaos:
       architectures:
         - amd64
-      main: algo-video-downloader
+      main: algo-video-bot
       description:
         en_us: Web tabanlı video indirme yöneticisi.
       tagline:
         en_us: Kişisel Video İndirme Yöneticiniz
       developer: MembaCo
       author: MembaCo
-      icon: https://www.hdfilmcehennemi.ltd/wp-content/uploads/2023/11/favicon.webp
+      icon: https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/png/movie-clapper.png
       thumbnail: ""
       title:
-        en_us: Algo Video Downloader
+        en_us: Algo Video Bot
       category: Utilities
       port_map: "5000"
