@@ -3,6 +3,22 @@ Bu projedeki tüm önemli değişiklikler bu dosyada belgelenmektedir.
 
 Format, Keep a Changelog standartlarına dayanmaktadır ve bu proje Semantic Versioning kullanmaktadır.
 
+[3.0.1] - 2025-09-13
+
+### Eklendi (Added)
+
+- `hdfilmcehennemi_worker`'a, sitenin kullandığı `devtools-detector.js` gibi anti-bot script'lerini yüklenmeden önce engelleyen bir mekanizma eklendi. Bu, indirme oturumunun (session) ve çerezlerin (cookie) geçersiz kılınmasını önler.
+
+### Değiştirildi (Changed)
+
+- `hdfilmcehennemi_worker` ve `izle_in_worker`, `undetected-chromedriver` ile `selenium-wire`'ı birleştiren daha kararlı ve güçlü bir hibrit sürücü modeli kullanacak şekilde tamamen yeniden düzenlendi. Bu standartlaşma, her iki worker'ın da en zorlu bot korumalarını aşmasını sağlar.
+- `worker.py` içerisindeki `download_with_yt_dlp` fonksiyonu, tarayıcıdan gelen `Referer` ve `User-Agent` gibi kritik başlıkları `yt-dlp`'nin anladığı özel komutlarla (`--referer`, `--user-agent`) akıllıca iletecek şekilde iyileştirildi.
+
+### Düzeltildi (Fixed)
+
+- `hdfilmcehennemi` sitesindeki güncellenmiş bot korumaları nedeniyle tamamen çalışmaz hale gelen `hdfilmcehennemi_worker`'daki kritik hatalar giderildi. Tarayıcının çökmesi (`NoSuchWindowException`), zaman aşımına uğraması (`TimeoutError`) ve yanlış başlatma parametreleri (`InvalidArgumentException`) gibi bir dizi sorun çözüldü.
+- `yt-dlp`'nin `403 Forbidden` (Yasak) ve `The downloaded file is empty` (İndirilen dosya boş) hataları almasına neden olan eksik kimlik bilgisi sorunu, tarayıcı başlıklarının ve çerezlerinin indirme aracına eksiksiz bir şekilde aktarılmasıyla çözüldü.
+
 [3.0.0] - 2025-09-13
 
 ### Eklendi (Added)
