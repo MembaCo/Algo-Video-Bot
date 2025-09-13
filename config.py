@@ -28,7 +28,10 @@ VIDEO_KEYWORDS = [".m3u8", "manifest", ".txt"]
 # İndirme klasörü artık Ayarlar'dan yönetildiği için buradan kaldırıldı.
 
 # --- Hedef Site Ayarları ---
-SUPPORTED_DOMAINS = {"hdfilmcehennemi.ltd": "hdfilmcehennemi"}
+SUPPORTED_DOMAINS = {
+    "hdfilmcehennemi.date": "hdfilmcehennemi",
+    "izle.in": "izlein",
+}
 
 # --- Otomatik İndirme Ayarları ---
 AUTO_DOWNLOAD_POLL_INTERVAL = 10

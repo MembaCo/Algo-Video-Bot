@@ -3,8 +3,35 @@ Bu projedeki tüm önemli değişiklikler bu dosyada belgelenmektedir.
 
 Format, Keep a Changelog standartlarına dayanmaktadır ve bu proje Semantic Versioning kullanmaktadır.
 
-[Unreleased]
-Henüz yayınlanmamış değişiklikler.
+[3.0.0] - 2025-09-13
+
+### Eklendi (Added)
+
+- **Yeni Site Desteği: `izle.in`**
+  - `izle.in` sitesinden film meta verilerini (başlık, yıl, özet, poster vb.) çekmek için `izle_in_scraper.py` adında yeni bir scraper eklendi.
+  - Sistemin yeni siteyi tanıması için `config.py` ve `scrapers/__init__.py` dosyaları güncellendi.
+
+### Değiştirildi (Changed)
+
+- **Mimarinin Yeniden Yapılandırılması: Modüler Worker Yapısı**
+  - Sizin öneriniz üzerine, her site için ayrı bir "worker" mantığı oluşturularak projenin mimarisi daha modüler ve sürdürülebilir hale getirildi. Bu, gelecekte yeni siteler eklendiğinde mevcut kodun bozulma riskini ortadan kaldırır.
+  - `workers` adında yeni bir klasör ve tüm worker'ların uyması gereken `workers/base_worker.py` şablonu oluşturuldu.
+  - `hdfilmcehennemi` ve `izle.in` siteleri için sırasıyla `workers/hdfilmcehennemi_worker.py` ve `workers/izle_in_worker.py` adında özel worker dosyaları oluşturuldu.
+  - Gelen URL'ye göre doğru worker'ı seçen bir fabrika (`workers/__init__.py`) eklendi.
+  - Ana `worker.py` dosyası, siteye özel tüm mantıklardan arındırılarak sadece süreci yöneten temiz bir yapıya kavuşturuldu.
+
+### Düzeltildi (Fixed)
+
+- **`izle.in` Entegrasyonundaki Gelişmiş Koruma Mekanizmaları Aşıldı:**
+  - Sitenin, otomasyon araçlarını tespit ettiğinde video oynatıcıyı gizlediği anlaşıldı.
+  - `undetected-chromedriver` kütüphanesi entegre edilerek tarayıcının bot olarak algılanması engellendi.
+  - Video oynatıcının `devtools-console-detectv2.js` adında özel bir güvenlik script'i ile korunduğu tespit edildi.
+  - `selenium-wire`'ın `block_requests` özelliği kullanılarak bu güvenlik script'inin yüklenmesi engellendi ve koruma mekanizması tamamen aşıldı.
+
+- **`hdfilmcehennemi` Worker Hatası Giderildi:**
+  - `izle.in` için yapılan geliştirmeler sırasında bozulan `hdfilmcehennemi` worker'ı, modüler mimari sayesinde orijinal ve kararlı çalışan haline geri döndürüldü.
+  - Her site için ayrı webdriver yapılandırması kullanılarak kütüphaneler arası çakışmaların önüne geçildi.
+  - Modülerleştirme sırasında eksik kalan `import re` ifadesi `hdfilmcehennemi_worker.py` dosyasına eklenerek `NameError` hatası düzeltildi.
 
 [2.7.0] - 2025-09-11
 Eklendi (Added)

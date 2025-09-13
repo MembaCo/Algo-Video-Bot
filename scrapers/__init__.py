@@ -2,6 +2,7 @@
 import logging
 from urllib.parse import urlparse
 from .hdfilmcehennemi_scraper import HdfilmcehennemiScraper
+from .izle_in_scraper import IzleInScraper
 import config
 
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Mevcut kazıyıcıları burada tanımlıyoruz
 AVAILABLE_SCRAPERS = {
     "hdfilmcehennemi": HdfilmcehennemiScraper,
-    # Gelecekte yeni bir site eklenirse -> "siteadi": SiteAdiScraper
+    "izlein": IzleInScraper,  # YENİ EKLENEN SATIR
 }
 
 

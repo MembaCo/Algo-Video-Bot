@@ -9,16 +9,11 @@ import sys
 import logging
 import glob
 import shutil
-from seleniumwire import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 
 import config
 from logging_config import setup_logging
 from database import get_all_settings as get_all_settings_from_db
+from workers import get_worker_for_url  # YENİ FABRİKA IMPORTU
 
 logger = logging.getLogger(__name__)
 
@@ -48,47 +43,6 @@ def _update_status_worker(
             f"ID {item_id} ({item_type}) için worker DB güncellemesinde hata: {e}",
             exc_info=True,
         )
-
-
-def find_manifest_url(target_url):
-    """Selenium ile manifest URL'sini, gerekli headerları ve çerezleri bulur."""
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--log-level=3")
-    options.add_argument("--mute-audio")
-    options.add_argument(f"user-agent={config.USER_AGENT}")
-    driver = None
-    try:
-        # Dockerfile'da path'e eklendiği için Service() yeterlidir.
-        service = Service()
-        driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 30)
-        driver.get(target_url)
-        play_button_main = wait.until(EC.element_to_be_clickable((By.ID, "fimcnt")))
-        driver.execute_script("arguments[0].click();", play_button_main)
-        iframe_locator = (By.CSS_SELECTOR, ".play-box-iframe iframe")
-        wait.until(EC.frame_to_be_available_and_switch_to_it(iframe_locator))
-        play_button_iframe = wait.until(EC.element_to_be_clickable((By.ID, "player")))
-        del driver.requests
-        driver.execute_script("arguments[0].click();", play_button_iframe)
-        request = driver.wait_for_request(
-            r".*(" + "|".join(re.escape(k) for k in config.VIDEO_KEYWORDS) + r").*",
-            timeout=20,
-        )
-        logger.info(f"Manifest URL'si bulundu: {request.url}")
-        headers = dict(request.headers)
-        cookies = driver.get_cookies()
-        return request.url, headers, cookies
-    except TimeoutException:
-        logger.warning(
-            f"Manifest URL'si beklenirken zaman aşımına uğradı. URL: {target_url}"
-        )
-        return None, None, None
-    finally:
-        if driver:
-            driver.quit()
 
 
 def download_with_yt_dlp(
@@ -181,18 +135,17 @@ def process_video(item_id, item_type):
     logger = setup_logging()
     conn = None
     cookie_filepath = f"cookies_{item_id}_{item_type}.txt"
+    manifest_url, headers, cookies = None, None, None
+
     try:
-        # HATA DÜZELTMESİ: Veritabanı kilitleme sorununu önlemek için timeout eklendi.
         conn = sqlite3.connect(config.DATABASE, timeout=20.0)
         conn.row_factory = sqlite3.Row
         settings = get_all_settings_from_db(conn)
 
-        # Klasör ayarlarını al
         movies_base_folder = settings.get("MOVIES_DOWNLOADS_FOLDER", "downloads/Movies")
         series_base_folder = settings.get("SERIES_DOWNLOADS_FOLDER", "downloads/Series")
         temp_folder = settings.get("TEMP_DOWNLOADS_FOLDER", "downloads/Temp")
 
-        # Gerekli klasörlerin var olduğundan emin ol
         os.makedirs(movies_base_folder, exist_ok=True)
         os.makedirs(series_base_folder, exist_ok=True)
         os.makedirs(temp_folder, exist_ok=True)
@@ -201,6 +154,7 @@ def process_video(item_id, item_type):
         temp_output_template = None
         final_folder = None
 
+        # Dosya yolu oluşturma mantığı...
         if item_type == "movie":
             item = conn.execute(
                 "SELECT * FROM movies WHERE id = ?", (item_id,)
@@ -215,14 +169,11 @@ def process_video(item_id, item_type):
             safe_filename = to_ascii_safe(filename_base)
             temp_output_template = os.path.join(temp_folder, safe_filename)
             final_folder = movies_base_folder
-
         elif item_type == "episode":
             item = conn.execute(
                 """
                 SELECT e.*, s.season_number, ser.title as series_title
-                FROM episodes e
-                JOIN seasons s ON e.season_id = s.id
-                JOIN series ser ON s.series_id = ser.id
+                FROM episodes e JOIN seasons s ON e.season_id = s.id JOIN series ser ON s.series_id = ser.id
                 WHERE e.id = ?
             """,
                 (item_id,),
@@ -234,7 +185,6 @@ def process_video(item_id, item_type):
                 "SERIES_FILENAME_TEMPLATE",
                 "{series_title}/S{season_number:02d}E{episode_number:02d} - {episode_title}",
             )
-
             relative_path_str = template.format(
                 series_title=item["series_title"],
                 season_number=item["season_number"],
@@ -244,7 +194,6 @@ def process_video(item_id, item_type):
             safe_relative_path = os.path.join(
                 *[to_ascii_safe(p) for p in relative_path_str.split("/")]
             )
-
             filename_base = os.path.basename(safe_relative_path)
             temp_output_template = os.path.join(temp_folder, filename_base)
             final_folder = os.path.join(
@@ -255,7 +204,13 @@ def process_video(item_id, item_type):
             raise ValueError("URL veya çıktı şablonu oluşturulamadı.")
 
         _update_status_worker(conn, item_id, item_type, status="Kaynak aranıyor...")
-        manifest_url, headers, cookies = find_manifest_url(url_to_fetch)
+
+        worker_instance = get_worker_for_url(url_to_fetch)
+        if not worker_instance:
+            raise Exception(f"Desteklenen bir worker bulunamadı: {url_to_fetch}")
+
+        # Hata ayıklama artık her worker'ın kendi içinde yönetiliyor
+        manifest_url, headers, cookies = worker_instance.find_manifest_url(url_to_fetch)
 
         if manifest_url:
             with open(cookie_filepath, "w", encoding="utf-8") as f:
@@ -278,21 +233,16 @@ def process_video(item_id, item_type):
                 temp_output_template,
                 settings.get("SPEED_LIMIT"),
             )
+
             if success:
-                # İndirilen dosyayı geçici klasörde bul (uzantısıyla birlikte)
                 files = glob.glob(f"{temp_output_template}.*")
                 if files:
                     temp_filepath = files[0]
                     downloaded_filename = os.path.basename(temp_filepath)
-
-                    # Hedef klasörün var olduğundan emin ol
                     os.makedirs(final_folder, exist_ok=True)
                     final_filepath = os.path.join(final_folder, downloaded_filename)
-
-                    # Dosyayı taşı
                     shutil.move(temp_filepath, final_filepath)
                     logger.info(f"Dosya şuraya taşındı: {final_filepath}")
-
                     _update_status_worker(
                         conn,
                         item_id,
@@ -315,19 +265,19 @@ def process_video(item_id, item_type):
                 _update_status_worker(conn, item_id, item_type, status=message)
                 logger.error(f"ID {item_id} ({item_type}): İndirme hatası - {message}")
         else:
-            _update_status_worker(
-                conn, item_id, item_type, status="Hata: Video kaynağı bulunamadı"
-            )
-            logger.warning(f"ID {item_id} ({item_type}): Manifest URL bulunamadı.")
+            raise Exception("Manifest URL'si bulunamadı.")
 
     except Exception as e:
         logger.exception(
             f"ID {item_id} ({item_type}): process_video içinde beklenmedik hata: {e}"
         )
+        status_msg = (
+            "Hata: Video kaynağı bulunamadı"
+            if not manifest_url
+            else "Hata: Beklenmedik Sistem Hatası"
+        )
         if conn:
-            _update_status_worker(
-                conn, item_id, item_type, status="Hata: Beklenmedik Sistem Hatası"
-            )
+            _update_status_worker(conn, item_id, item_type, status=status_msg)
     finally:
         if conn:
             conn.close()
