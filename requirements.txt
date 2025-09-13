@@ -10,3 +10,5 @@ Flask-WTF>=1.2.1
 python-dotenv>=1.0.1
 werkzeug>=3.0.0
 APScheduler==3.10.4
+m3u8>=0.9.0
+aria2p>=0.11.3

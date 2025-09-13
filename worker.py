@@ -13,7 +13,7 @@ import shutil
 import config
 from logging_config import setup_logging
 from database import get_all_settings as get_all_settings_from_db
-from workers import get_worker_for_url  # YENİ FABRİKA IMPORTU
+from workers import get_worker_for_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 def _update_status_worker(
     conn, item_id, item_type, status=None, progress=None, filepath=None
 ):
-    """Mevcut bir veritabanı bağlantısını kullanarak durumu günceller."""
     table = "movies" if item_type == "movie" else "episodes"
     try:
         cursor = conn.cursor()
@@ -55,7 +54,6 @@ def download_with_yt_dlp(
     output_template,
     speed_limit,
 ):
-    """yt-dlp ile videoyu indirir ve ilerlemeyi veritabanına yazar."""
     command = [
         "yt-dlp",
         "--cookies",
@@ -71,8 +69,18 @@ def download_with_yt_dlp(
     ]
     if speed_limit:
         command.extend(["--limit-rate", speed_limit])
-    for key, value in headers.items():
-        command.extend(["--add-header", f"{key}: {value}"])
+
+    # Akıllı Başlık Yönetimi
+    if headers:
+        # yt-dlp'nin özel parametrelerini önceliklendir
+        if headers.get("Referer"):
+            command.extend(["--referer", headers.pop("Referer")])
+        if headers.get("User-Agent"):
+            command.extend(["--user-agent", headers.pop("User-Agent")])
+        # Geriye kalan tüm başlıkları genel olarak ekle
+        for key, value in headers.items():
+            command.extend(["--add-header", f"{key}: {value}"])
+
     command.append(manifest_url)
 
     process = subprocess.Popen(
@@ -103,6 +111,8 @@ def download_with_yt_dlp(
             error_message = "Hata: Diskte yeterli alan yok."
         elif "HTTP Error 404" in full_output:
             error_message = "Hata: Video kaynağı bulunamadı (404)."
+        elif "The downloaded file is empty" in full_output:
+            error_message = "Hata: İndirilen dosya boş."
         else:
             last_lines = "\n".join(full_output.strip().split("\n")[-5:])
             error_message = f"Hata: İndirme başarısız oldu. Detay: ...{last_lines}"
@@ -126,8 +136,7 @@ def to_ascii_safe(text):
         .replace("Ç", "C")
     )
     text = re.sub(r'[<>:"/\\|?*]', "_", text).strip()
-    text = re.sub(r"[^\x00-\x7F]+", "", text)
-    return text
+    return re.sub(r"[^\x00-\x7F]+", "", text)
 
 
 def process_video(item_id, item_type):
@@ -150,11 +159,8 @@ def process_video(item_id, item_type):
         os.makedirs(series_base_folder, exist_ok=True)
         os.makedirs(temp_folder, exist_ok=True)
 
-        url_to_fetch = None
-        temp_output_template = None
-        final_folder = None
+        url_to_fetch, temp_output_template, final_folder = None, None, None
 
-        # Dosya yolu oluşturma mantığı...
         if item_type == "movie":
             item = conn.execute(
                 "SELECT * FROM movies WHERE id = ?", (item_id,)
@@ -200,16 +206,14 @@ def process_video(item_id, item_type):
                 series_base_folder, os.path.dirname(safe_relative_path)
             )
 
-        if not url_to_fetch or not temp_output_template or not final_folder:
+        if not all([url_to_fetch, temp_output_template, final_folder]):
             raise ValueError("URL veya çıktı şablonu oluşturulamadı.")
 
         _update_status_worker(conn, item_id, item_type, status="Kaynak aranıyor...")
-
         worker_instance = get_worker_for_url(url_to_fetch)
         if not worker_instance:
             raise Exception(f"Desteklenen bir worker bulunamadı: {url_to_fetch}")
 
-        # Hata ayıklama artık her worker'ın kendi içinde yönetiliyor
         manifest_url, headers, cookies = worker_instance.find_manifest_url(url_to_fetch)
 
         if manifest_url:
