@@ -2,15 +2,20 @@
 
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 # .env dosyasındaki değişkenleri yükle
 load_dotenv()
 
 VERSION = "v2.7.0 Beta"
 
-# --- Veri Klasörü Tanımı ---
-# Kalıcı verilerin (veritabanı, loglar vb.) saklanacağı klasör.
-DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
+# --- NİHAİ DÜZELTME: Proje Kök Dizinini Tanımla ve Mutlak Yollar Kullan ---
+# Bu dosyanın bulunduğu dizinin bir üst dizinini projenin kökü olarak kabul ediyoruz.
+BASE_DIR = Path(__file__).resolve().parent
+
+# DATA_DIR artık her zaman mutlak bir yol olacak (örn: /path/to/your/project/app/data)
+DATA_DIR = BASE_DIR / os.environ.get("DATA_DIR", "app/data")
+# --- DÜZELTME SONU ---
 
 # --- Güvenlik Ayarları ---
 SECRET_KEY = os.getenv("SECRET_KEY", "cok_gizli_bir_anahtar_kodu_bunu_mutlaka_degistir")

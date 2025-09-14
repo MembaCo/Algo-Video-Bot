@@ -15,6 +15,7 @@ database.db
 .env
 TODO
 .code-workspace
+app
 
 # Log Dosyaları
 *.log
